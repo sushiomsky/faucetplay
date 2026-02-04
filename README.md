@@ -1,6 +1,14 @@
-# FaucetPlay Bot 🎰
+# FaucetPlay Bot
 
-**Automated DuckDice Faucet Claiming & Betting Bot with GUI**
+🎰 **Automated DuckDice Faucet Claiming & Betting Bot**
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)](https://github.com/yourusername/faucetplay)
+
+> **⚠️ Disclaimer**: This bot is for educational purposes only. Gambling involves financial risk. Use at your own risk.
+
+---
 
 A cross-platform desktop application for automated cryptocurrency faucet claiming, betting, and withdrawal on DuckDice.io.
 
