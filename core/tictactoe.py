@@ -124,14 +124,10 @@ class TicTacToeClaimEngine:
     def __init__(
         self,
         cookie: str,
-        fingerprint: str = "",
-        playwright_proxy: Optional[dict] = None,  # from NetworkProfileManager
         headless: bool = True,
         game_delay: float = 0.4,   # seconds between moves (anti-detection)
     ):
         self.cookie = cookie
-        self.fingerprint = fingerprint
-        self.playwright_proxy = playwright_proxy
         self.headless = headless
         self.game_delay = game_delay
 
@@ -152,18 +148,13 @@ class TicTacToeClaimEngine:
             )
 
         with sync_playwright() as pw:
-            launch_opts: dict = {"headless": self.headless}
-            if self.playwright_proxy:
-                launch_opts["proxy"] = self.playwright_proxy
-
-            browser = pw.chromium.launch(**launch_opts)
+            browser = pw.chromium.launch(headless=self.headless)
             context = browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
-                extra_http_headers={"x-fingerprint": self.fingerprint} if self.fingerprint else {},
             )
 
             # Inject cookie into browser context

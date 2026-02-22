@@ -68,7 +68,8 @@ class FaucetBot:
             "total_wins":       0,
             "total_losses":     0,
             "starting_balance": 0.0,
-            "current_balance":  0.0,
+            "current_balance":  0.0,   # faucet balance
+            "main_balance":     0.0,   # main wallet balance
             "total_claimed":    0.0,
             "cashout_count":    0,
             "total_cashed_out": 0.0,
@@ -220,6 +221,13 @@ class FaucetBot:
             self.stats["cashout_count"]    += 1
             self.stats["total_cashed_out"] += transferred
 
+            # Refresh main balance display
+            try:
+                bal = self._api.get_balance(currency)
+                self.stats["main_balance"] = bal.get("main", 0.0)
+            except Exception:
+                pass
+
             self._log(f"✅ Cashout OK: {transferred:.8f} {currency} → main")
             self._cashout_available_at = (time.time() + cooldown) if cooldown > 0 else 0.0
             if cooldown > 0:
@@ -285,8 +293,6 @@ class FaucetBot:
             self._log(f"🎮 PAW level requires {games} TTT game(s)…")
             engine = TicTacToeClaimEngine(
                 cookie=self._cfg.get("cookie", ""),
-                fingerprint=None,
-                playwright_proxy=None,
             )
             try:
                 ok = engine.run(games_needed=games, currency=currency)

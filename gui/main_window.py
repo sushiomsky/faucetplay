@@ -305,6 +305,9 @@ class MainWindow(ctk.CTk):
         self._bot_thread: Optional[threading.Thread] = None
         self._start_time: Optional[datetime] = None
         self._pulse_state = True
+        # Tracked across poll cycles so we can detect changes and fire toasts
+        self._prev_wins: int   = 0
+        self._prev_cash: float = 0.0
 
         self.title(f"{APP_NAME} {APP_VERSION} — {TAGLINE}")
         self.geometry("960x700")
@@ -604,6 +607,8 @@ class MainWindow(ctk.CTk):
 
         self._bot = FaucetBot(config=self._cfg, log_callback=log_cb)
         self._start_time = datetime.now(timezone.utc)
+        self._prev_wins = 0
+        self._prev_cash = 0.0
         self._set_controls_state(True, False)
         self._status("Starting…", T.TEXT_DIM)
         self._progress.set(0)
@@ -688,11 +693,6 @@ class MainWindow(ctk.CTk):
     # ── Log polling & card updates ─────────────────────────────────
 
     def _poll_logs(self):
-        prev_wins = (self._bot.stats["total_wins"]
-                     if self._bot else 0)
-        prev_cash = (self._bot.stats["total_cashed_out"]
-                     if self._bot else 0.0)
-
         for _ in range(60):
             try:
                 line = self._log_queue.get_nowait()
@@ -704,8 +704,8 @@ class MainWindow(ctk.CTk):
             new_wins = self._bot.stats["total_wins"]
             new_cash = self._bot.stats["total_cashed_out"]
 
-            # Toast on win
-            if new_wins > prev_wins:
+            # Toast on win (compare against last known values)
+            if new_wins > self._prev_wins:
                 cur = self._bot.stats["current_balance"]
                 self.toasts.show(
                     f"Won!  Faucet: {cur:.6f} {self._cfg.get('currency','')}", "success"
@@ -713,12 +713,15 @@ class MainWindow(ctk.CTk):
                 self._card_faucet.flash(T.GOLD)
 
             # Toast on cashout
-            if new_cash > prev_cash:
-                diff = new_cash - prev_cash
+            if new_cash > self._prev_cash:
+                diff = new_cash - self._prev_cash
                 self.toasts.show(
                     f"Cashed out {diff:.6f} → main wallet 💰", "success", 6000
                 )
                 self._card_cashout.flash(T.GOLD)
+
+            self._prev_wins = new_wins
+            self._prev_cash = new_cash
 
             self._update_stats_display()
             self._update_cashout_countdown()
@@ -728,18 +731,19 @@ class MainWindow(ctk.CTk):
     def _update_stats_display(self):
         if not self._bot:
             return
-        stats  = self._bot.get_stats()
-        n      = stats["total_bets"]
-        w      = stats["total_wins"]
-        l      = stats["total_losses"]
-        cur_b  = stats["current_balance"]
-        profit = cur_b - stats["starting_balance"]
-        cashed = stats["total_cashed_out"]
-        cashct = stats["cashout_count"]
-        claims = int(stats.get("total_claimed", 0))
-        rounds = int(stats.get("rounds_completed", 0))
-        state  = self._bot.get_state()
-        paused = getattr(self._bot, "paused", False)
+        stats   = self._bot.get_stats()
+        n       = stats["total_bets"]
+        w       = stats["total_wins"]
+        l       = stats["total_losses"]
+        cur_b   = stats["current_balance"]
+        main_b  = stats.get("main_balance", 0.0)
+        profit  = cur_b - stats["starting_balance"]
+        cashed  = stats["total_cashed_out"]
+        cashct  = stats["cashout_count"]
+        claims  = int(stats.get("total_claimed", 0))
+        rounds  = int(stats.get("rounds_completed", 0))
+        state   = self._bot.get_state()
+        paused  = getattr(self._bot, "paused", False)
 
         p_col = T.GREEN if profit >= 0 else T.RED
         wr    = f"{w/n*100:.0f}%" if n else "—%"
@@ -768,6 +772,7 @@ class MainWindow(ctk.CTk):
 
         def _upd():
             self._card_faucet.set(f"{cur_b:.6f}", T.TEAL)
+            self._card_main.set(f"{main_b:.6f}" if main_b else "—", T.BLUE)
             self._card_profit.set(f"{profit:+.6f}", p_col)
             self._card_cashout.set(
                 f"{cashed:.6f}" + (f"  ×{cashct}" if cashct > 1 else ""),
@@ -792,7 +797,7 @@ class MainWindow(ctk.CTk):
                 state="normal" if (self._bot and self._bot.running) else "disabled"
             )
 
-        self.after(0, _upd)
+        _upd()
 
     def _update_cashout_countdown(self):
         if not self._bot:
@@ -804,7 +809,6 @@ class MainWindow(ctk.CTk):
             txt = (f"⏳ cashout in {h}h {m:02d}m {s:02d}s" if h
                    else f"⏳ cashout in {m}m {s:02d}s" if m
                    else f"⏳ cashout in {s}s")
-            self.after(0, lambda: self._cashout_cd_lbl.configure(
-                text=txt, text_color=T.ACCENT2))
+            self._cashout_cd_lbl.configure(text=txt, text_color=T.ACCENT2)
         else:
-            self.after(0, lambda: self._cashout_cd_lbl.configure(text=""))
+            self._cashout_cd_lbl.configure(text="")

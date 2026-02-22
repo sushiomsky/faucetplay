@@ -5,7 +5,6 @@ Features:
   - Cookie expiry detection (raises CookieExpiredError)
   - Dynamic per-currency minimum-bet fetch
   - PAW level fetch and cache
-  - Full proxy/VPN routing via NetworkProfile (requests + Playwright)
 """
 
 from __future__ import annotations
@@ -37,7 +36,7 @@ class RateLimitError(Exception):
 # Retry / session helpers
 # ---------------------------------------------------------------------------
 
-def _build_session(proxies: Optional[dict] = None) -> requests.Session:
+def _build_session() -> requests.Session:
     """Create a requests Session with automatic retries on transient errors."""
     session = requests.Session()
     retry = Retry(
@@ -50,8 +49,6 @@ def _build_session(proxies: Optional[dict] = None) -> requests.Session:
     adapter = HTTPAdapter(max_retries=retry)
     session.mount("https://", adapter)
     session.mount("http://", adapter)
-    if proxies:
-        session.proxies.update(proxies)
     return session
 
 
@@ -60,7 +57,7 @@ def _build_session(proxies: Optional[dict] = None) -> requests.Session:
 # ---------------------------------------------------------------------------
 
 class DuckDiceAPI:
-    """DuckDice API wrapper with hardening and per-account network routing."""
+    """DuckDice API wrapper with retry hardening."""
 
     BASE_URL = "https://duckdice.io"
 
@@ -68,18 +65,10 @@ class DuckDiceAPI:
     RATE_LIMIT_RETRIES = 6
     RATE_LIMIT_BASE_WAIT = 5  # seconds
 
-    def __init__(
-        self,
-        api_key: str,
-        cookie: str = "",
-        fingerprint: str = "",
-        proxies: Optional[dict] = None,    # requests-compatible dict from NetworkProfile
-    ):
+    def __init__(self, api_key: str, cookie: str = ""):
         self.api_key = api_key
-        self.cookie = cookie
-        self.fingerprint = fingerprint or "faucetplay_default"
-        self._proxies = proxies
-        self._session = _build_session(proxies)
+        self.cookie  = cookie
+        self._session = _build_session()
 
         # Caches
         self._paw_level: Optional[int] = None
@@ -96,7 +85,6 @@ class DuckDiceAPI:
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
                 "Chrome/124.0.0.0 Safari/537.36"
             ),
-            "x-fingerprint": self.fingerprint,
             "Content-Type": "application/json",
             "Cookie": self.cookie,
             "Accept": "application/json",

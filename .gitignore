@@ -49,6 +49,7 @@ strategy_config.json
 dist/
 build/
 *.spec
+!faucetplay.spec
 
 # User config
 config.json
