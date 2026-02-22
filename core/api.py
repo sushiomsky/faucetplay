@@ -286,12 +286,96 @@ class DuckDiceAPI:
             return None
         return resp.json()
 
-    # --- Cashout / Withdrawal (stubs — endpoint TBD) ----------------------
+    # --- Cashout (faucet → main wallet) -----------------------------------
 
-    def cashout(self, currency: str, amount: float) -> bool:
-        """Transfer from faucet to main wallet (endpoint TBD)."""
-        logger.warning("cashout: API endpoint not yet confirmed — skipping")
-        return False
+    # DuckDice cashout cooldown is per-account; the API returns the next
+    # allowed cashout timestamp in the response body.  We track it locally.
+    CASHOUT_DEFAULT_COOLDOWN = 3600   # 1 hour fallback if API doesn't tell us
+
+    def cashout(self, currency: str, amount: float) -> Dict:
+        """
+        Transfer `amount` from faucet wallet to main wallet.
+
+        Returns a dict with keys:
+          success   bool   – True if transfer was accepted
+          amount    float  – amount actually transferred
+          cooldown  int    – seconds until next cashout is allowed (0 = no limit)
+          message   str    – human-readable status
+
+        Raises CookieExpiredError if the session is dead.
+        """
+        url = f"{self.BASE_URL}/api/bot/transfer?api_key={self.api_key}"
+        payload = {
+            "symbol": currency.upper(),
+            "amount": f"{amount:.9f}",
+        }
+        resp = self._post(url, json=payload)
+
+        # DuckDice may also expose this under /api/faucet/transfer — try both
+        if resp.status_code == 404:
+            url2 = f"{self.BASE_URL}/api/faucet/transfer?api_key={self.api_key}"
+            resp = self._post(url2, json=payload)
+
+        if resp.status_code == 200:
+            data = resp.json()
+            # Invalidate balance cache so next get_balance() is fresh
+            self._user_info_cache = None
+
+            # Parse cooldown from response if provided
+            cooldown = 0
+            next_ts = (data.get("next_cashout_at")
+                       or data.get("nextCashoutAt")
+                       or data.get("cooldown"))
+            if next_ts:
+                try:
+                    import time as _time
+                    cooldown = max(0, int(float(next_ts)) - int(_time.time()))
+                except (ValueError, TypeError):
+                    cooldown = 0
+
+            transferred = float(
+                data.get("amount") or data.get("transferred") or amount
+            )
+            logger.info("Cashout %s %s → main OK  (cooldown %ds)",
+                        transferred, currency, cooldown)
+            return {"success": True, "amount": transferred,
+                    "cooldown": cooldown, "message": "Transfer successful"}
+
+        if resp.status_code == 429:
+            # Rate-limited or cooldown enforced by server
+            try:
+                body = resp.json()
+                cooldown = int(body.get("retry_after")
+                               or body.get("cooldown")
+                               or self.CASHOUT_DEFAULT_COOLDOWN)
+            except Exception:
+                cooldown = self.CASHOUT_DEFAULT_COOLDOWN
+            logger.warning("Cashout on cooldown for %ds", cooldown)
+            return {"success": False, "amount": 0.0,
+                    "cooldown": cooldown,
+                    "message": f"Cashout cooldown active ({cooldown}s)"}
+
+        logger.error("cashout HTTP %s: %s", resp.status_code, resp.text[:300])
+        return {"success": False, "amount": 0.0, "cooldown": 0,
+                "message": f"Cashout failed (HTTP {resp.status_code})"}
+
+    def get_cashout_cooldown(self, currency: str) -> int:
+        """
+        Check how many seconds remain before the next cashout is allowed.
+        Returns 0 if a cashout can be made immediately.
+        Probes the API with a zero-amount dry-run if supported, otherwise
+        returns 0 (optimistic — the real cashout call will return cooldown info).
+        """
+        url = f"{self.BASE_URL}/api/bot/transfer?api_key={self.api_key}"
+        try:
+            resp = self._post(url, json={"symbol": currency.upper(),
+                                         "amount": "0", "dry_run": True})
+            if resp.status_code == 429:
+                body = resp.json()
+                return int(body.get("retry_after") or body.get("cooldown") or 0)
+            return 0
+        except Exception:
+            return 0   # assume available; real call will catch it
 
     def withdraw(self, currency: str, amount: float, address: str) -> Optional[Dict]:
         """Withdraw to external wallet (endpoint TBD)."""

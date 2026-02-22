@@ -194,11 +194,13 @@ class MainWindow(ctk.CTk):
         # Balance cards row
         cards = ctk.CTkFrame(tab, fg_color="transparent")
         cards.grid(row=0, column=0, sticky="ew", pady=(4, 8))
-        self._card_faucet  = BalanceCard(cards, "Faucet Balance", colour=T.TEAL)
-        self._card_main    = BalanceCard(cards, "Main Balance",   colour=T.BLUE)
-        self._card_profit  = BalanceCard(cards, "Session Profit", colour=T.GREEN)
-        self._card_bets    = BalanceCard(cards, "Bets / W / L",   colour=T.TEXT)
-        for card in (self._card_faucet, self._card_main, self._card_profit, self._card_bets):
+        self._card_faucet  = BalanceCard(cards, "Faucet Balance",  colour=T.TEAL)
+        self._card_main    = BalanceCard(cards, "Main Balance",    colour=T.BLUE)
+        self._card_profit  = BalanceCard(cards, "Session Profit",  colour=T.GREEN)
+        self._card_cashout = BalanceCard(cards, "💰 Cashed Out",   colour=T.ACCENT)
+        self._card_bets    = BalanceCard(cards, "Bets / W / L",    colour=T.TEXT)
+        for card in (self._card_faucet, self._card_main, self._card_profit,
+                     self._card_cashout, self._card_bets):
             card.pack(side="left", expand=True, fill="both", padx=4)
 
         # Progress bar + status
@@ -209,9 +211,21 @@ class MainWindow(ctk.CTk):
         self._status_lbl = ctk.CTkLabel(pf_inner, text="Select an account to begin",
                                          font=T.FONT_BODY, text_color=T.TEXT_DIM)
         self._status_lbl.pack(side="left")
+        # Cashout countdown label (hidden until cooldown active)
+        self._cashout_cd_lbl = ctk.CTkLabel(pf_inner, text="", font=T.FONT_BODY,
+                                             text_color=T.ACCENT2)
+        self._cashout_cd_lbl.pack(side="left", padx=(12, 0))
         self._paw_lbl = ctk.CTkLabel(pf_inner, text="", font=T.FONT_BODY,
                                       text_color=T.ACCENT2)
         self._paw_lbl.pack(side="right")
+        # Manual cashout button (only active while bot is running)
+        self._cashout_btn = ctk.CTkButton(
+            pf_inner, text="💰 Cashout Now", width=120, height=28,
+            font=T.FONT_BODY, fg_color=T.ACCENT, hover_color=T.ACCENT2,
+            command=self._manual_cashout,
+        )
+        self._cashout_btn.pack(side="right", padx=(0, 8))
+        self._cashout_btn.configure(state="disabled")
         self._progress = ctk.CTkProgressBar(prog_frame, height=10,
                                              fg_color=T.BG3, progress_color=T.ACCENT)
         self._progress.pack(fill="x", padx=12, pady=(0,8))
@@ -418,14 +432,34 @@ class MainWindow(ctk.CTk):
                     self._log.append(line)
                 except queue.Empty:
                     break
+        self._poll_cashout_countdown()
         self.after(150, self._poll_logs)
+
+    def _poll_cashout_countdown(self):
+        """Update the cashout countdown label while cooldown is active."""
+        bot = self._bots.get(self._selected_id) if self._selected_id else None
+        if not bot:
+            return
+        secs = bot.get_cashout_countdown()
+        state = bot.get_state()
+        if secs > 0:
+            h, r = divmod(secs, 3600)
+            m, s = divmod(r, 60)
+            cd_text = (f"⏳ Cashout in {h}h {m:02d}m {s:02d}s" if h
+                       else f"⏳ Cashout in {m}m {s:02d}s" if m
+                       else f"⏳ Cashout in {s}s")
+            self._cashout_cd_lbl.configure(text=cd_text, text_color=T.ACCENT2)
+        elif state == "CASHOUT_WAIT":
+            self._cashout_cd_lbl.configure(text="⏳ Waiting for cashout…",
+                                           text_color=T.ACCENT2)
+        else:
+            self._cashout_cd_lbl.configure(text="")
 
     # ── Card updates ─────────────────────────────────────────────
     def _update_cards_from_log(self, account_id: str, msg: str):
         """Parse log messages to update balance/stats cards."""
         if account_id != self._selected_id:
             return
-        # Very lightweight inline parse — avoids extra API calls
         bot = self._bots.get(account_id)
         if not bot:
             return
@@ -435,16 +469,42 @@ class MainWindow(ctk.CTk):
         l = stats["total_losses"]
         profit = stats["current_balance"] - stats["starting_balance"]
         p_col = T.GREEN if profit >= 0 else T.RED
+        cashed = stats["total_cashed_out"]
+        state  = bot.get_state()
 
         def _update():
             self._card_faucet.set(f"{stats['current_balance']:.6f}", T.TEAL)
             self._card_profit.set(f"{profit:+.6f}", p_col)
+            self._card_cashout.set(
+                f"{cashed:.6f}"
+                + (f" ×{stats['cashout_count']}" if stats["cashout_count"] > 1 else ""),
+                T.GREEN if cashed > 0 else T.TEXT,
+            )
             self._card_bets.set(f"{n} / {w} / {l}", T.TEXT)
-            if stats["starting_balance"] > 0 and bot.target_amount > 0:
-                pct = min(stats["current_balance"] / bot.target_amount, 1.0)
+            if bot.cashout_threshold > 0:
+                pct = min(stats["current_balance"] / bot.cashout_threshold, 1.0)
                 self._progress.set(pct)
             acct = self._amgr.get(account_id)
             if acct:
+                state_label = {
+                    "FARMING":      "Farming…",
+                    "CASHOUT_WAIT": "⏳ Awaiting cashout cooldown…",
+                    "POST_CASHOUT": "💰 Cashed out!",
+                    "STOPPED":      "Stopped",
+                }.get(state, state)
+                status_col = T.ACCENT2 if state == "CASHOUT_WAIT" else T.GREEN
                 self._status_lbl.configure(
-                    text=f"Account: {acct.label}  |  Running…", text_color=T.GREEN)
+                    text=f"Account: {acct.label}  |  {state_label}",
+                    text_color=status_col,
+                )
+            # Enable manual cashout button when bot is running
+            is_running = bot.running and state in ("FARMING", "CASHOUT_WAIT")
+            self._cashout_btn.configure(state="normal" if is_running else "disabled")
         self.after(0, _update)
+
+    def _manual_cashout(self):
+        """Trigger an immediate cashout for the selected account."""
+        bot = self._bots.get(self._selected_id) if self._selected_id else None
+        if bot:
+            t = threading.Thread(target=bot.cashout_now, daemon=True)
+            t.start()

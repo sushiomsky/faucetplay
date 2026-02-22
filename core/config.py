@@ -30,8 +30,12 @@ class BotConfig:
             'target_amount': 20.0,
             'house_edge': 0.03,
             'min_bet': 0.001,
+            # Cashout settings
             'auto_cashout': False,
-            'cashout_threshold': 10.0,
+            'cashout_threshold': 0.0,        # 0 = use target_amount
+            'cashout_cooldown_seconds': 3600, # expected platform cooldown
+            'continue_after_cashout': True,   # keep farming same target after cashout
+            # Withdrawal settings
             'auto_withdrawal': False,
             'withdrawal_address': '',
             'withdrawal_amount': 50.0,
