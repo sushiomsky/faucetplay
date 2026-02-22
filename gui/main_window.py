@@ -629,7 +629,7 @@ class MainWindow(ctk.CTk):
             self._bot.start()
         except BotError as e:
             self._log_queue.put(f"🔴 Bot error: {e}")
-            self.after(0, lambda: self.toasts.show(str(e), "error"))
+            self.after(0, lambda msg=str(e): self.toasts.show(msg, "error"))
         finally:
             self.after(0, self._on_bot_done)
 

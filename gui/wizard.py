@@ -222,8 +222,9 @@ class OnboardingWizard(ctk.CTkToplevel):
             self.after(0, lambda: self._status("Check your cookie and go back.", T.RED))
             self.after(0, lambda: self._next_btn.configure(state="normal"))
         except Exception as e:
+            err = str(e)
             self.after(0, lambda: self._paw_info.configure(
-                text=f"Could not connect: {e}", text_color=T.YELLOW))
+                text=f"Could not connect: {err}", text_color=T.YELLOW))
             self.after(0, lambda: self._status("Connection failed — check API key & cookie.", T.YELLOW))
             self.after(0, lambda: self._next_btn.configure(state="normal"))
 

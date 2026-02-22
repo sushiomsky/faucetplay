@@ -35,5 +35,7 @@ jobs:
       continue-on-error: true
     
     - name: Test imports
+      env:
+        PYTHONUTF8: "1"
       run: |
-        python -c "from core import DuckDiceAPI, BotConfig, FaucetBot, BotScheduler; print('✅ Core modules imported successfully')"
+        python -c "from core import DuckDiceAPI, BotConfig, FaucetBot, BotScheduler; print('Core modules imported OK')"
