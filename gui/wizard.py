@@ -33,7 +33,7 @@ class OnboardingWizard(ctk.CTkToplevel):
                  on_complete: Callable[[], None]):
         super().__init__(parent)
         self.title("FaucetPlay — Setup")
-        self.geometry("540x520")
+        self.geometry("540x580")
         self.resizable(False, False)
         self.configure(fg_color=T.BG)
         self.grab_set()
@@ -72,6 +72,16 @@ class OnboardingWizard(ctk.CTkToplevel):
         self._progress.pack(fill="x")
         self._progress.set(0)
 
+        # Step dots indicator
+        dots_frame = ctk.CTkFrame(self, fg_color="transparent")
+        dots_frame.pack(pady=(4, 0))
+        self._dots: list[ctk.CTkLabel] = []
+        for _ in range(len(STEPS)):
+            lbl = ctk.CTkLabel(dots_frame, text="○", font=T.FONT_H3,
+                                text_color=T.TEXT_DIM)
+            lbl.pack(side="left", padx=3)
+            self._dots.append(lbl)
+
         self._content = ctk.CTkFrame(self, fg_color="transparent")
         self._content.pack(fill="both", expand=True, padx=24, pady=12)
 
@@ -107,6 +117,12 @@ class OnboardingWizard(ctk.CTkToplevel):
         self._next_btn.configure(text="Finish ✓" if idx == len(STEPS)-1 else "Next ▶",
                                   state="normal")
         self._status("")
+        # Update dots
+        for i, dot in enumerate(self._dots):
+            if i == idx:
+                dot.configure(text="●", text_color=T.ACCENT)
+            else:
+                dot.configure(text="○", text_color=T.TEXT_DIM)
         [self._step_apikey, self._step_cookie, self._step_paw,
          self._step_currency, self._step_target][idx]()
 
@@ -138,10 +154,38 @@ class OnboardingWizard(ctk.CTkToplevel):
               "PAW (Play and Win) level determines how you claim faucets.\n"
               "Lower levels require a quick Tic-Tac-Toe mini-game.")
 
+        # PAW levels reference table
+        tbl = ctk.CTkFrame(self._content, fg_color=T.BG3, corner_radius=6)
+        tbl.pack(fill="x", pady=(4, 10))
+        PAW_ROWS = [
+            (0, "New Player",   "Tic-Tac-Toe (many games)",  T.TEXT_DIM),
+            (1, "Bronze",       "Tic-Tac-Toe (3 games)",     T.TEXT_DIM),
+            (2, "Silver 🥈",    "Tic-Tac-Toe (2 games)",     T.ACCENT2),
+            (3, "Gold 🥇",      "Tic-Tac-Toe (1 game)",      T.ACCENT2),
+            (4, "Platinum 💎",  "Direct API claim ✅",        T.GREEN),
+            (5, "Diamond 💠",   "Direct API claim ✅",        T.GREEN),
+        ]
+        hdrs = [("Level", 50), ("Tier", 110), ("Claim Method", 220)]
+        for col, (h, w) in enumerate(hdrs):
+            ctk.CTkLabel(tbl, text=h, font=T.FONT_SMALL, text_color=T.TEXT_DIM,
+                          width=w, anchor="w").grid(row=0, column=col,
+                                                     padx=(10 if col == 0 else 4, 4),
+                                                     pady=(6, 2), sticky="w")
+        for r, (lvl, tier, method, col) in enumerate(PAW_ROWS, start=1):
+            ctk.CTkLabel(tbl, text=str(lvl), font=T.FONT_SMALL, text_color=col,
+                          width=50, anchor="w").grid(row=r, column=0,
+                                                      padx=(10, 4), pady=2, sticky="w")
+            ctk.CTkLabel(tbl, text=tier, font=T.FONT_SMALL, text_color=T.TEXT,
+                          width=110, anchor="w").grid(row=r, column=1,
+                                                       padx=4, pady=2, sticky="w")
+            ctk.CTkLabel(tbl, text=method, font=T.FONT_SMALL, text_color=col,
+                          width=220, anchor="w").grid(row=r, column=2,
+                                                       padx=(4, 10), pady=2, sticky="w")
+
         self._paw_badge = ctk.CTkLabel(self._content, text="",
-                                        font=("Segoe UI", 36, "bold"),
+                                        font=(T.FONT_H1[0], 28, "bold"),
                                         text_color=T.ACCENT)
-        self._paw_badge.pack(pady=12)
+        self._paw_badge.pack(pady=(4, 2))
         self._paw_info = ctk.CTkLabel(self._content, text="Connecting…",
                                        font=T.FONT_BODY, text_color=T.TEXT_DIM,
                                        wraplength=480)

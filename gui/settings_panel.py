@@ -4,6 +4,7 @@ Inline-editable settings: credentials, strategy, cashout, schedule.
 """
 from __future__ import annotations
 
+import sys
 import threading
 import tkinter as tk
 from typing import Callable, List, Optional
@@ -11,6 +12,7 @@ from typing import Callable, List, Optional
 import customtkinter as ctk
 
 from . import theme as T
+from core.api import DuckDiceAPI
 from core.config import BotConfig
 from core.scheduler import BotScheduler
 
@@ -85,13 +87,58 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             "How to find your cookie: DuckDice.io → F12 → Application "
             "→ Cookies → copy the full string."
         ), font=T.FONT_SMALL, text_color=T.TEXT_DIM, wraplength=480, justify="left")
-        hint.pack(anchor="w", padx=4, pady=(0,4))
+        hint.pack(anchor="w", padx=4, pady=(0, 4))
+
+        self._test_btn = ctk.CTkButton(
+            self, text="🔍 Test Connection", height=32,
+            fg_color=T.BG3, hover_color=T.BG2, font=T.FONT_BODY,
+            command=self._test_connection,
+        )
+        self._test_btn.pack(anchor="w", pady=(0, 4))
 
         # ── Strategy ─────────────────────────────────────────────
         _section("🎲  Strategy")
-        _row("Currency", lambda p: ctk.CTkEntry(p, textvariable=self._currency_var, height=32))
-        _row("Target amount", lambda p: ctk.CTkEntry(p, textvariable=self._target_var, height=32))
-        _row("House edge (0–1)", lambda p: ctk.CTkEntry(p, textvariable=self._edge_var, height=32))
+        _row("Currency", lambda p: ctk.CTkOptionMenu(
+            p, variable=self._currency_var, height=32,
+            values=["USDC", "BTC", "ETH", "LTC", "DOGE", "TRX", "SOL", "BNB", "XRP"],
+            fg_color=T.BG3, button_color=T.BG3, button_hover_color=T.BG2,
+        ))
+
+        # Target amount row with presets
+        target_row = ctk.CTkFrame(self, fg_color="transparent")
+        target_row.pack(fill="x", pady=3)
+        ctk.CTkLabel(target_row, text="Target amount", width=160, anchor="w",
+                      font=T.FONT_BODY, text_color=T.TEXT).pack(side="left")
+        ctk.CTkEntry(target_row, textvariable=self._target_var, height=32,
+                      width=100).pack(side="left")
+        for preset in ("5", "10", "20", "50", "100"):
+            _v = preset
+            ctk.CTkButton(
+                target_row, text=_v, width=38, height=26,
+                fg_color=T.BG3, hover_color=T.BG2, font=T.FONT_SMALL,
+                command=lambda v=_v: self._target_var.set(v),
+            ).pack(side="left", padx=(4, 0))
+
+        self._target_err_lbl = ctk.CTkLabel(self, text="", font=T.FONT_SMALL,
+                                             text_color=T.RED)
+        self._target_err_lbl.pack(anchor="w", padx=(164, 0))
+
+        def _validate_target(*_):
+            try:
+                val = float(self._target_var.get())
+                if val <= 0:
+                    raise ValueError()
+                self._target_err_lbl.configure(text="")
+            except ValueError:
+                if self._target_var.get():
+                    self._target_err_lbl.configure(text="⚠ Must be a positive number")
+        self._target_var.trace_add("write", _validate_target)
+
+        # House edge row with hint
+        _row("House edge", lambda p: ctk.CTkEntry(p, textvariable=self._edge_var, height=32))
+        ctk.CTkLabel(self, text="Default 0.03 (3%). Lower = safer but slower.",
+                      font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(
+            anchor="w", padx=(164, 0), pady=(0, 4))
 
         # ── Cashout ───────────────────────────────────────────────
         _section("💰  Cashout")
@@ -145,6 +192,29 @@ class SettingsPanel(ctk.CTkScrollableFrame):
                        fg_color=T.ACCENT, hover_color=T.ACCENT2,
                        font=T.FONT_BODY, command=self._save).pack(pady=4)
 
+    # ── Test connection ────────────────────────────────────────
+
+    def _test_connection(self):
+        self._test_btn.configure(state="disabled", text="Testing…")
+        threading.Thread(target=self._do_test_connection, daemon=True).start()
+
+    def _do_test_connection(self):
+        try:
+            api = DuckDiceAPI(
+                api_key=self._api_key_var.get().strip(),
+                cookie=self._cookie_var.get().strip(),
+            )
+            paw = api.get_paw_level(force=True)
+            self.after(0, lambda: self._status_lbl.configure(
+                text=f"✅ Connected — PAW Level {paw}", text_color=T.GREEN))
+        except Exception as e:
+            err = str(e)
+            self.after(0, lambda: self._status_lbl.configure(
+                text=f"❌ {err}", text_color=T.RED))
+        finally:
+            self.after(0, lambda: self._test_btn.configure(
+                state="normal", text="🔍 Test Connection"))
+
     # ── Save ──────────────────────────────────────────────────────
 
     def _save(self):
@@ -182,11 +252,10 @@ class SettingsPanel(ctk.CTkScrollableFrame):
                                          jitter_minutes=int(self._jitter_var.get() or "5"))
 
         # Auto-start registration
-        import sys
-        from core.scheduler import BotScheduler
         if self._autostart_var.get():
             self._sched.register_autostart(sys.executable)
 
         self._status_lbl.configure(text="✅  Settings saved.", text_color=T.GREEN)
+        self.after(3000, lambda: self._status_lbl.configure(text=""))
         if self._on_save:
             self._on_save()

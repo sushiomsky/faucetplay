@@ -1,4 +1,21 @@
 """Shared theme constants for the FaucetPlay GUI."""
+import platform
+
+# Cross-platform font selection
+_sys = platform.system()
+if _sys == "Windows":
+    _FONT = "Segoe UI"
+elif _sys == "Darwin":
+    _FONT = "SF Pro Display"
+else:
+    _FONT = "Ubuntu"
+
+if _sys == "Windows":
+    _MONO = "Consolas"
+elif _sys == "Darwin":
+    _MONO = "Menlo"
+else:
+    _MONO = "DejaVu Sans Mono"
 
 # Main palette
 BG        = "#1a1a2e"
@@ -21,18 +38,22 @@ STATUS_IDLE      = TEXT_DIM
 STATUS_ERROR     = RED
 STATUS_SCHEDULED = BLUE
 
-# Network badge colours
-NET_PROXY  = TEAL
-NET_VPN    = BLUE
-NET_DIRECT = YELLOW
-
 # Fonts  (family, size, weight)
-FONT_H1    = ("Segoe UI", 20, "bold")
-FONT_H2    = ("Segoe UI", 14, "bold")
-FONT_H3    = ("Segoe UI", 12, "bold")
-FONT_BODY  = ("Segoe UI", 11)
-FONT_SMALL = ("Segoe UI", 9)
-FONT_MONO  = ("Consolas", 10)
+FONT_H1       = (_FONT, 20, "bold")
+FONT_H2       = (_FONT, 14, "bold")
+FONT_H3       = (_FONT, 12, "bold")
+FONT_BODY     = (_FONT, 11)
+FONT_SMALL    = (_FONT, 9)
+FONT_MONO     = (_MONO, 10)
+FONT_CARD_VAL = (_FONT, 18, "bold")
+
+# Corner radii
+CORNER_SM = 6
+CORNER_MD = 10
+CORNER_LG = 14
+
+# Animation interval (ms)
+ANIM_MS = 80
 
 # Widget sizing
 BTN_H      = 36
