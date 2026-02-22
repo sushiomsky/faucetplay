@@ -1,233 +1,318 @@
 """
-FaucetPlay Bot - Main Bot Logic
-Handles the claim-bet-cashout-withdraw cycle
+FaucetPlay — Bot Engine
+Drives the claim → bet → repeat cycle for a single Account.
+PAW-aware: routes low-PAW accounts through the TicTacToe engine.
+All API requests go through the account's NetworkProfile (proxy/VPN).
 """
 
+from __future__ import annotations
+
+import logging
 import time
+from datetime import datetime, timezone
 from typing import Callable, Optional
-from datetime import datetime
-from .api import DuckDiceAPI
-from .config import BotConfig
+
+from .accounts import Account
+from .api import DuckDiceAPI, CookieExpiredError, RateLimitError
+from .network import NetworkProfileManager, ProfileType
+from .tictactoe import TicTacToeClaimEngine
+
+logger = logging.getLogger(__name__)
+
+
+class BotError(Exception):
+    pass
 
 
 class FaucetBot:
-    """Main bot logic for automated betting"""
-    
-    def __init__(self, config: BotConfig, log_callback: Optional[Callable] = None):
-        self.config = config
-        self.log_callback = log_callback or print
-        
-        # Initialize API
-        self.api = DuckDiceAPI(
-            api_key=config.get('api_key'),
-            cookie=config.get('cookie')
-        )
-        
-        # Bot state
+    """
+    Bot for a single Account.  Instantiate one per account for parallel runs.
+    """
+
+    def __init__(
+        self,
+        account: Account,
+        network_mgr: NetworkProfileManager,
+        target_amount: float = 20.0,
+        house_edge: float = 0.03,
+        auto_cashout: bool = False,
+        cashout_threshold: float = 10.0,
+        log_callback: Optional[Callable[[str], None]] = None,
+    ):
+        self.account = account
+        self._net_mgr = network_mgr
+        self.target_amount = target_amount
+        self.house_edge = house_edge
+        self.auto_cashout = auto_cashout
+        self.cashout_threshold = cashout_threshold
+        self._log_cb = log_callback or (lambda msg: logger.info("[%s] %s", account.label, msg))
+
         self.running = False
         self.paused = False
-        self.last_claim_time = 0
-        self.claim_cooldown = 60
-        
-        # Statistics
+        self._last_claim_time: float = 0.0
+        self.claim_cooldown: int = 60
+
         self.stats = {
-            'session_start': None,
-            'total_bets': 0,
-            'total_wins': 0,
-            'total_losses': 0,
-            'starting_balance': 0.0,
-            'current_balance': 0.0,
-            'total_profit': 0.0,
-            'total_claimed': 0.0
+            "session_start": None,
+            "total_bets": 0,
+            "total_wins": 0,
+            "total_losses": 0,
+            "starting_balance": 0.0,
+            "current_balance": 0.0,
+            "total_claimed": 0.0,
         }
-    
-    def log(self, message: str):
-        """Log a message"""
-        timestamp = datetime.now().strftime('%H:%M:%S')
-        self.log_callback(f"[{timestamp}] {message}")
-    
-    def start(self):
-        """Start the bot"""
+
+        self._api: Optional[DuckDiceAPI] = None
+
+    # --- Logging -----------------------------------------------------------
+
+    def _log(self, msg: str) -> None:
+        ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
+        self._log_cb(f"[{ts}] {msg}")
+
+    # --- API init with network routing ------------------------------------
+
+    def _build_api(self) -> DuckDiceAPI:
+        proxies: Optional[dict] = None
+        playwright_proxy: Optional[dict] = None
+        profile_id = self.account.network_profile_id
+
+        if profile_id:
+            profile = self._net_mgr.get(profile_id)
+            if profile and profile.type == ProfileType.PROXY:
+                proxies = self._net_mgr.get_proxies_dict(profile_id)
+                playwright_proxy = self._net_mgr.get_playwright_proxy(profile_id)
+            elif profile and profile.type == ProfileType.VPN:
+                # VPN is connected at session start; traffic flows through it natively
+                pass
+
+        return DuckDiceAPI(
+            api_key=self.account.api_key,
+            cookie=self.account.cookie,
+            fingerprint=self.account.fingerprint,
+            proxies=proxies,
+        )
+
+    # --- Session lifecycle ------------------------------------------------
+
+    def start(self) -> None:
         self.running = True
-        self.stats['session_start'] = datetime.now()
-        self.log("=" * 60)
-        self.log("🎰 BOT STARTED")
-        self.log("=" * 60)
-        self._run_loop()
-    
-    def stop(self):
-        """Stop the bot"""
+        self.stats["session_start"] = datetime.now(timezone.utc)
+        self._log("=" * 60)
+        self._log(f"🎰 BOT STARTED  |  Account: {self.account.label}")
+        self._log("=" * 60)
+
+        # Connect VPN if applicable
+        self._vpn_connect()
+
+        self._api = self._build_api()
+
+        # Refresh PAW level
+        paw = self._api.get_paw_level(force=True)
+        self.account.paw_level = paw
+        self._log(f"🐾 PAW level: {paw}  |  TTT games needed: {self._api.ttt_games_needed()}")
+
+        currency = self.account.preferred_currency
+        min_bet = self._api.get_min_bet(currency)
+        self._log(f"Currency: {currency}  |  Min bet: {min_bet}  |  Target: {self.target_amount}")
+
+        balance = self._api.get_balance(currency)
+        self.stats["starting_balance"] = balance["faucet"]
+        self._run_loop(currency, min_bet)
+
+    def stop(self) -> None:
         self.running = False
-        self.log("🛑 Bot stopped")
-    
-    def pause(self):
-        """Pause the bot"""
+        self._log("�� Bot stopped")
+        self._vpn_disconnect()
+
+    def pause(self) -> None:
         self.paused = True
-        self.log("⏸ Bot paused")
-    
-    def resume(self):
-        """Resume the bot"""
+        self._log("⏸ Bot paused")
+
+    def resume(self) -> None:
         self.paused = False
-        self.log("▶ Bot resumed")
-    
-    def _run_loop(self):
-        """Main bot loop"""
-        currency = self.config.get('currency')
-        target_amount = self.config.get('target_amount')
-        min_bet = self.config.get('min_bet')
-        
-        self.log(f"Currency: {currency}")
-        self.log(f"Target: ${target_amount:.2f}")
-        self.log(f"Strategy: Claim → All-in Roll → Repeat")
-        self.log("=" * 60)
-        
-        # Get starting balance
-        balance_info = self.api.get_balance(currency)
-        self.stats['starting_balance'] = balance_info['faucet']
-        
+        self._log("▶ Bot resumed")
+
+    # --- VPN lifecycle ----------------------------------------------------
+
+    def _vpn_connect(self) -> None:
+        pid = self.account.network_profile_id
+        if not pid:
+            return
+        profile = self._net_mgr.get(pid)
+        if profile and profile.type == ProfileType.VPN:
+            self._log("🛡 Connecting VPN...")
+            ok = self._net_mgr.vpn_connect(pid)
+            if ok:
+                ip = self._net_mgr.verify_ip(pid)
+                self._log(f"🛡 VPN connected  |  External IP: {ip or 'unknown'}")
+            else:
+                self.running = False
+                raise BotError("VPN connection failed — aborting session for safety.")
+
+    def _vpn_disconnect(self) -> None:
+        pid = self.account.network_profile_id
+        if pid:
+            profile = self._net_mgr.get(pid)
+            if profile and profile.type == ProfileType.VPN:
+                self._net_mgr.vpn_disconnect(pid)
+                self._log("🛡 VPN disconnected")
+
+    # --- Main loop --------------------------------------------------------
+
+    def _run_loop(self, currency: str, min_bet: float) -> None:
+        assert self._api is not None
         while self.running:
-            # Handle pause
             while self.paused and self.running:
                 time.sleep(0.5)
-            
             if not self.running:
                 break
-            
-            # Get current balance
-            balance_info = self.api.get_balance(currency)
-            faucet_balance = balance_info['faucet']
-            main_balance = balance_info['main']
-            self.stats['current_balance'] = faucet_balance
-            
-            # Check for target reached
-            if faucet_balance >= target_amount:
-                self.log(f"🎉 TARGET REACHED: {faucet_balance:.6f} {currency}")
-                
-                # Auto cashout if enabled
-                if self.config.get('auto_cashout'):
-                    self._auto_cashout(currency, faucet_balance)
-                
-                # Auto withdrawal if enabled
-                if self.config.get('auto_withdrawal'):
-                    self._auto_withdraw(currency, main_balance)
-                
+
+            try:
+                balance = self._api.get_balance(currency)
+            except CookieExpiredError:
+                self._log("🔑 Cookie expired — stopping session. Please update your cookie.")
+                self.running = False
                 break
-            
-            # Check if balance too low - need to claim
-            if faucet_balance < min_bet:
-                self._claim_faucet(currency)
+            except RateLimitError as e:
+                self._log(f"⚠️ {e}")
+                time.sleep(30)
                 continue
-            
-            # Place bet
-            self._place_bet(currency, faucet_balance, target_amount)
-        
-        self._show_final_stats()
-    
-    def _claim_faucet(self, currency: str):
-        """Claim faucet with cooldown handling"""
-        time_since_claim = time.time() - self.last_claim_time
-        
-        if time_since_claim < self.claim_cooldown:
-            wait_time = int(self.claim_cooldown - time_since_claim)
-            self.log(f"Cooldown active. Waiting {wait_time}s...")
-            
-            for remaining in range(wait_time, 0, -1):
+
+            faucet = balance["faucet"]
+            self.stats["current_balance"] = faucet
+
+            if faucet >= self.target_amount:
+                self._log(f"🎉 TARGET REACHED: {faucet:.8f} {currency}")
+                if self.auto_cashout and faucet >= self.cashout_threshold:
+                    self._api.cashout(currency, faucet)
+                break
+
+            if faucet < min_bet:
+                self._do_claim(currency)
+                continue
+
+            self._do_bet(currency, faucet)
+
+        self._show_stats()
+
+    # --- Claiming ---------------------------------------------------------
+
+    def _do_claim(self, currency: str) -> None:
+        assert self._api is not None
+        # Respect cooldown
+        elapsed = time.time() - self._last_claim_time
+        if elapsed < self.claim_cooldown:
+            wait = int(self.claim_cooldown - elapsed)
+            self._log(f"⏳ Cooldown: {wait}s remaining…")
+            for remaining in range(wait, 0, -1):
                 if not self.running:
                     return
                 while self.paused and self.running:
                     time.sleep(0.5)
                 if remaining % 10 == 0:
-                    self.log(f"Cooldown: {remaining}s")
+                    self._log(f"⏳ Cooldown: {remaining}s")
                 time.sleep(1)
-        
-        self.log("Claiming faucet...")
-        if self.api.claim_faucet(currency):
-            self.last_claim_time = time.time()
-            self.log("✅ Claim successful!")
-            self.stats['total_claimed'] += 0.21  # Approximate faucet value
-            time.sleep(10)  # Wait for balance sync
-        else:
-            self.log("❌ Claim failed. Retrying...")
-            time.sleep(10)
-    
-    def _place_bet(self, currency: str, balance: float, target: float):
-        """Place an all-in bet"""
-        house_edge = self.config.get('house_edge')
-        
-        # Calculate required win chance
-        multiplier_needed = target / balance
-        raw_chance = (100.0 * (1.0 - house_edge)) / multiplier_needed if multiplier_needed > 0 else 0.0
-        chance = max(0.01, min(99.0, round(raw_chance, 2)))
-        
-        self.log("=" * 50)
-        self.log(f"Faucet: {balance:.8f} {currency}")
-        self.log(f"Multiplier needed: {multiplier_needed:.2f}x")
-        self.log(f"Win chance: {chance:.2f}%")
-        self.log(f"ALL-IN BET: {balance:.8f} {currency}")
-        self.log("=" * 50)
-        
-        # Place bet
-        result = self.api.play_dice(currency, balance, chance, is_high=True, use_faucet=True)
-        
-        self.stats['total_bets'] += 1
-        
-        if result:
-            data = result.get('data', {})
-            new_balance = float(data.get('balance', {}).get('faucet', 0))
-            win = data.get('win', False)
-            
-            if win:
-                self.stats['total_wins'] += 1
-                self.log(f"🎉 WON! New balance: {new_balance:.8f} {currency}")
+
+        games = self._api.ttt_games_needed()
+        if games > 0:
+            self._log(f"🎮 PAW {self.account.paw_level}: playing {games} TTT game(s)…")
+            profile_id = self.account.network_profile_id
+            pw_proxy = self._net_mgr.get_playwright_proxy(profile_id) if profile_id else None
+            engine = TicTacToeClaimEngine(
+                cookie=self.account.cookie,
+                fingerprint=self.account.fingerprint,
+                playwright_proxy=pw_proxy,
+            )
+            try:
+                ok = engine.run(games_needed=games, currency=currency)
+            except Exception as e:
+                self._log(f"❌ TTT engine error: {e}")
+                time.sleep(10)
+                return
+            if ok:
+                self._last_claim_time = time.time()
+                self.stats["total_claimed"] += 1
+                self._log("✅ Faucet claimed via TTT!")
+                # Refresh PAW level after successful claim
+                self.account.paw_level = self._api.get_paw_level(force=True)
             else:
-                self.stats['total_losses'] += 1
-                self.log(f"❌ Lost. New balance: {new_balance:.8f} {currency}")
+                self._log("❌ TTT claim failed. Retrying in 10s…")
+                time.sleep(10)
         else:
-            self.log("❌ Bet failed")
-        
+            self._log("🔵 Claiming faucet (direct)…")
+            try:
+                ok = self._api.claim_faucet(currency)
+            except CookieExpiredError:
+                self._log("🔑 Cookie expired during claim. Please update your cookie.")
+                self.running = False
+                return
+            if ok:
+                self._last_claim_time = time.time()
+                self.stats["total_claimed"] += 1
+                self._log("✅ Faucet claimed!")
+                time.sleep(10)
+            else:
+                self._log("❌ Claim failed. Retrying in 10s…")
+                time.sleep(10)
+
+    # --- Betting ----------------------------------------------------------
+
+    def _do_bet(self, currency: str, faucet: float) -> None:
+        assert self._api is not None
+        multiplier = self.target_amount / faucet if faucet else 0
+        raw_chance = (100.0 * (1.0 - self.house_edge)) / multiplier if multiplier else 0.0
+        chance = max(0.01, min(99.0, round(raw_chance, 2)))
+
+        self._log(f"🎲 Faucet: {faucet:.8f} {currency}  |  {multiplier:.2f}x needed  |  Chance: {chance:.2f}%")
+
+        try:
+            result = self._api.play_dice(currency, faucet, chance, is_high=True, use_faucet=True)
+        except CookieExpiredError:
+            self._log("🔑 Cookie expired during bet. Please update your cookie.")
+            self.running = False
+            return
+        except RateLimitError as e:
+            self._log(f"⚠️ {e}")
+            time.sleep(30)
+            return
+
+        self.stats["total_bets"] += 1
+
+        if result:
+            data = result.get("data", {})
+            new_bal = float(data.get("balance", {}).get("faucet", 0))
+            win = data.get("win", False)
+            if win:
+                self.stats["total_wins"] += 1
+                self._log(f"🎉 WON!  New faucet: {new_bal:.8f} {currency}")
+            else:
+                self.stats["total_losses"] += 1
+                self._log(f"❌ Lost.  New faucet: {new_bal:.8f} {currency}")
+        else:
+            self._log("❌ Bet failed (no response).")
+
         time.sleep(2)
-    
-    def _auto_cashout(self, currency: str, amount: float):
-        """Automatically cashout to main wallet"""
-        threshold = self.config.get('cashout_threshold')
-        
-        if amount >= threshold:
-            self.log(f"💰 Auto-cashout triggered: {amount:.6f} {currency}")
-            # TODO: Implement cashout API call
-            # self.api.cashout(currency, amount)
-            self.log("⚠️ Cashout API not yet implemented")
-    
-    def _auto_withdraw(self, currency: str, amount: float):
-        """Automatically withdraw to external wallet"""
-        min_amount = self.config.get('withdrawal_amount')
-        address = self.config.get('withdrawal_address')
-        
-        if amount >= min_amount and address:
-            self.log(f"📤 Auto-withdrawal triggered: {amount:.6f} {currency}")
-            self.log(f"Address: {address}")
-            # TODO: Implement withdrawal API call
-            # self.api.withdraw(currency, amount, address)
-            self.log("⚠️ Withdrawal API not yet implemented")
-    
-    def _show_final_stats(self):
-        """Show final session statistics"""
-        self.log("=" * 60)
-        self.log("📊 SESSION STATISTICS")
-        self.log("=" * 60)
-        self.log(f"Duration: {datetime.now() - self.stats['session_start']}")
-        self.log(f"Total bets: {self.stats['total_bets']}")
-        self.log(f"Wins: {self.stats['total_wins']}")
-        self.log(f"Losses: {self.stats['total_losses']}")
-        
-        if self.stats['total_bets'] > 0:
-            win_rate = (self.stats['total_wins'] / self.stats['total_bets']) * 100
-            self.log(f"Win rate: {win_rate:.2f}%")
-        
-        profit = self.stats['current_balance'] - self.stats['starting_balance']
-        self.log(f"Profit/Loss: {profit:+.6f}")
-        self.log(f"Total claimed: {self.stats['total_claimed']:.2f}")
-        self.log("=" * 60)
-    
+
+    # --- Stats ------------------------------------------------------------
+
+    def _show_stats(self) -> None:
+        self._log("=" * 60)
+        self._log("📊 SESSION STATISTICS")
+        self._log("=" * 60)
+        start = self.stats["session_start"]
+        if start:
+            self._log(f"Duration: {datetime.now(timezone.utc) - start}")
+        self._log(f"Total bets:  {self.stats['total_bets']}")
+        self._log(f"Wins:        {self.stats['total_wins']}")
+        self._log(f"Losses:      {self.stats['total_losses']}")
+        n = self.stats["total_bets"]
+        if n:
+            self._log(f"Win rate:    {self.stats['total_wins']/n*100:.2f}%")
+        profit = self.stats["current_balance"] - self.stats["starting_balance"]
+        self._log(f"Profit/Loss: {profit:+.8f}")
+        self._log(f"Claims:      {self.stats['total_claimed']}")
+        self._log("=" * 60)
+
     def get_stats(self) -> dict:
-        """Get current statistics"""
         return self.stats.copy()

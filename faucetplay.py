@@ -1,24 +1,29 @@
 import requests
 import time
 import sys
+import os
+sys.path.insert(0, os.path.dirname(__file__))
+from core.config import BotConfig
 
-# --- KONFIGURATION ---
-API_KEY = "8f9a51ce-af2d-11f0-a08a-524acb1a7d8c"
-CURRENCY = "USDC"
-TARGET_USD = 20.5
-USDC_PRICE = 1.0 # USDC is pegged to USD
-HOUSE_EDGE = 0.03 # 3% House Edge
-MIN_API_CHANCE = 0.01  # API minimum chance in percent (supports two decimals)
-# Safety / fee settings
-MIN_BET_USDC = 0.001  # API minimum bet in USDC (updated to match actual API requirements)
-ESTIMATED_FEE_USDC = 0.00001  # reserve a small amount for fees
+# Load all credentials from encrypted config — nothing is hardcoded here
+_cfg = BotConfig()
+_cfg.load()
 
-# Nur für das Claiming notwendig (Simulation von Browser-Anfragen)
+API_KEY = _cfg.get('api_key') or ""
+CURRENCY = _cfg.get('currency') or "USDC"
+TARGET_USD = float(_cfg.get('target_amount') or 20.5)
+USDC_PRICE = 1.0
+HOUSE_EDGE = float(_cfg.get('house_edge') or 0.03)
+MIN_API_CHANCE = 0.01
+MIN_BET_USDC = 0.001
+ESTIMATED_FEE_USDC = 0.00001
+
+# Browser headers built from config (cookie loaded from encrypted store)
 BROWSER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36",
-    "x-fingerprint": "f1958fcb6b5c154edf3993cd27f3cbce",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+    "x-fingerprint": _cfg.get('fingerprint') or "",
     "Content-Type": "application/json",
-    "Cookie": "_ga=GA1.1.881683543.1765609753; _dvp=0:mj3ygn0b:IIC_dBVXSEPyGsaM6nOabaDvySswdfil; g_state={\"i_l\":0,\"i_ll\":1765609763317,\"i_b\":\"plrFCNNM6a9jS7GiXy+ZG99ig60pWyyMwgJa2Gjt58U\",\"i_e\":{\"enable_itp_optimization\":0}}; _at=EZaWSvP8i2B7p1dww9y6zv2sv1Ph1Ec2GLI1aw3vVyKDeapoFKAxIPYFGjMd; locale=en; _t=1766493823; _ga_7Q8ZMQJCT2=GS2.1.s1766504264$o40$g1$t1766505297$j60$l0$h0; _dvs=0:mjir0pb8:PhlPK_TVcqDakbZg3ILF5NEZRJzL0rOz; _fp=f1958fcb6b5c154edf3993cd27f3cbce; cf_clearance=rIa3MX1G1J5PUarKkgotGOem0tt0RBnQvQs_iyPk6ng-1766520918-1.2.1.1-867GnRm6RMaywB7rhGE333ZObIAanIuPkz3ESmgETBxN.qLhkBrJdeYdcdXAhawBS71bmezkP_9Q4UYlPtZMxyih2JuHOyCwhp3GLKPMY8hBJXMxj9TByJao9nwxHqhpn.eOEWxm3PDlHnhlcPnpGX8HsbLSvh3ZGeDRveVw95JgqfmCW34MLb4EIW8iYo75Q1hGiYnqsdEyV2RWpGg8w9F3JLQwO8rrZ4UOIpx.v.w; _cr=SOL; _ga_E57XCSGSSX=GS2.1.s1766518216$o93$g1$t1766524100$j58$l0$h0"
+    "Cookie": _cfg.get('cookie') or "",
 }
 
 def get_api_data(endpoint):
