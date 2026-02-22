@@ -4,7 +4,7 @@
 
 ### Farm DuckDice faucets on autopilot
 
-[![Release](https://img.shields.io/github/v/release/faucetplay/faucetplay?color=e94560&label=latest)](https://github.com/faucetplay/faucetplay/releases/latest)
+[![Release](https://img.shields.io/github/v/release/sushiomsky/faucetplay?color=e94560&label=latest)](https://github.com/sushiomsky/faucetplay/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#install)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
@@ -38,7 +38,7 @@ FaucetPlay claims your DuckDice faucets, bets them up to your target, cashes out
 
 ### Option A — Download pre-built binary (recommended)
 
-Go to [**Releases**](https://github.com/faucetplay/faucetplay/releases/latest) and grab the package for your OS:
+Go to [**Releases**](https://github.com/sushiomsky/faucetplay/releases/latest) and grab the package for your OS:
 
 | OS | File |
 |---|---|
@@ -52,7 +52,7 @@ Unzip and run `FaucetPlay` — no Python needed.
 
 ```bash
 # Requires Python 3.11+
-git clone https://github.com/faucetplay/faucetplay.git
+git clone https://github.com/sushiomsky/faucetplay.git
 cd faucetplay
 pip install -r requirements.txt
 playwright install chromium

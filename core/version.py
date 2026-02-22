@@ -6,8 +6,8 @@ APP_NAME    = "FaucetPlay"
 APP_VERSION = "1.0.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
-# GitHub repository (owner/repo) — update before publishing
-GITHUB_OWNER     = "faucetplay"
+# GitHub repository (owner/repo)
+GITHUB_OWNER     = "sushiomsky"
 GITHUB_REPO      = "faucetplay"
 GITHUB_REPO_FULL = f"{GITHUB_OWNER}/{GITHUB_REPO}"
 GITHUB_RELEASES  = f"https://github.com/{GITHUB_REPO_FULL}/releases"
