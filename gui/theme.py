@@ -21,6 +21,7 @@ else:
 BG        = "#1a1a2e"
 BG2       = "#16213e"
 BG3       = "#0f3460"
+BG_CARD   = "#1e2340"   # slightly lighter card background
 ACCENT    = "#e94560"
 ACCENT2   = "#f5a623"
 TEXT      = "#eaeaea"
@@ -30,6 +31,7 @@ RED       = "#e74c3c"
 YELLOW    = "#f39c12"
 BLUE      = "#2980b9"
 TEAL      = "#1abc9c"
+GOLD      = "#f0c040"   # win / cashout highlight
 
 # Status colours
 STATUS_RUNNING   = GREEN
