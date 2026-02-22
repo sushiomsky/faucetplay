@@ -20,9 +20,9 @@ a = Analysis(
     ["faucetplay_app.py"],
     pathex=["."],
     binaries=[],
-    datas=ctk_datas + [
-        ("assets", "assets"),
-    ],
+    datas=ctk_datas + (
+        [("assets", "assets")] if Path("assets").exists() and any(Path("assets").iterdir()) else []
+    ),
     hiddenimports=ctk_hiddens + [
         "cryptography",
         "cryptography.fernet",
