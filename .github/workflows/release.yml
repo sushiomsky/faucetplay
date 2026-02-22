@@ -1,0 +1,200 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version tag (e.g. v1.0.0)"
+        required: false
+
+permissions:
+  contents: write
+
+jobs:
+  # ─────────────────────────────────────────────────────────────────
+  # Windows — produces FaucetPlay-Windows.zip containing FaucetPlay.exe
+  # ─────────────────────────────────────────────────────────────────
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Build with PyInstaller
+        run: pyinstaller faucetplay.spec
+
+      - name: Package
+        run: |
+          Compress-Archive -Path dist\FaucetPlay\* -DestinationPath FaucetPlay-Windows.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaucetPlay-Windows
+          path: FaucetPlay-Windows.zip
+
+  # ─────────────────────────────────────────────────────────────────
+  # macOS — produces FaucetPlay-macOS.dmg  (arm64 + x86_64)
+  # ─────────────────────────────────────────────────────────────────
+  build-macos:
+    runs-on: macos-14        # Apple Silicon runner
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Build with PyInstaller
+        run: pyinstaller faucetplay.spec
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg || true
+          create-dmg \
+            --volname "FaucetPlay" \
+            --window-size 500 320 \
+            --icon-size 96 \
+            --app-drop-link 360 145 \
+            "FaucetPlay-macOS.dmg" \
+            "dist/FaucetPlay.app" \
+          || hdiutil create -volname FaucetPlay \
+               -srcfolder dist/FaucetPlay.app \
+               -ov -format UDZO \
+               FaucetPlay-macOS.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaucetPlay-macOS
+          path: FaucetPlay-macOS.dmg
+
+  # ─────────────────────────────────────────────────────────────────
+  # Linux — produces FaucetPlay-Linux.tar.gz  (x86_64)
+  # ─────────────────────────────────────────────────────────────────
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y \
+            python3-tk libxcb-cursor0 libglib2.0-0 \
+            libnss3 libatk1.0-0 libatk-bridge2.0-0 \
+            libdrm2 libgbm1 libxkbcommon0 xvfb
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Build with PyInstaller
+        run: pyinstaller faucetplay.spec
+
+      - name: Create launcher script
+        run: |
+          cat > dist/FaucetPlay/faucetplay.sh << 'SH'
+          #!/usr/bin/env bash
+          DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+          exec "$DIR/FaucetPlay" "$@"
+          SH
+          chmod +x dist/FaucetPlay/faucetplay.sh
+          
+          # .desktop entry for app launchers
+          cat > dist/FaucetPlay/FaucetPlay.desktop << 'DESK'
+          [Desktop Entry]
+          Type=Application
+          Name=FaucetPlay
+          Comment=DuckDice faucet farming bot
+          Exec=./faucetplay.sh
+          Terminal=false
+          Categories=Utility;
+          DESK
+
+      - name: Package
+        run: |
+          tar -czf FaucetPlay-Linux.tar.gz -C dist FaucetPlay
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaucetPlay-Linux
+          path: FaucetPlay-Linux.tar.gz
+
+  # ─────────────────────────────────────────────────────────────────
+  # Create GitHub Release and attach all three packages
+  # ─────────────────────────────────────────────────────────────────
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-packages
+
+      - name: Create release notes
+        id: notes
+        run: |
+          VERSION="${{ github.ref_name }}"
+          echo "## FaucetPlay ${VERSION}" > notes.md
+          echo "" >> notes.md
+          echo "### Downloads" >> notes.md
+          echo "| Platform | File | Notes |" >> notes.md
+          echo "|----------|------|-------|" >> notes.md
+          echo "| 🪟 Windows | \`FaucetPlay-Windows.zip\` | Extract and run \`FaucetPlay.exe\` |" >> notes.md
+          echo "| 🍎 macOS   | \`FaucetPlay-macOS.dmg\`   | Open DMG and drag to Applications |" >> notes.md
+          echo "| 🐧 Linux   | \`FaucetPlay-Linux.tar.gz\` | Extract and run \`./faucetplay.sh\` |" >> notes.md
+          echo "" >> notes.md
+          echo "### First run" >> notes.md
+          echo "On first launch the setup wizard guides you through:" >> notes.md
+          echo "1. Paste your DuckDice API key" >> notes.md
+          echo "2. Paste your session cookie" >> notes.md
+          echo "3. Auto-detected PAW level" >> notes.md
+          echo "4. Choose currency" >> notes.md
+          echo "5. Set target amount & cashout options" >> notes.md
+          echo "" >> notes.md
+          echo "> ⚠️ **Security**: credentials are stored encrypted locally. Never share your cookie." >> notes.md
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "FaucetPlay ${{ github.ref_name }}"
+          body_path: notes.md
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            dist-packages/FaucetPlay-Windows/FaucetPlay-Windows.zip
+            dist-packages/FaucetPlay-macOS/FaucetPlay-macOS.dmg
+            dist-packages/FaucetPlay-Linux/FaucetPlay-Linux.tar.gz
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

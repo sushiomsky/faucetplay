@@ -1,26 +1,14 @@
 """
 FaucetPlay — Bot Engine
-Drives the claim → bet → cashout → repeat cycle for a single Account.
+Single-account faucet farming: claim → bet → cashout → repeat.
 
-Cashout loop state machine
-──────────────────────────
-FARMING:
-  Claim faucet (PAW-aware) → bet toward target.
-  On target reached → attempt cashout:
-    • If cashout succeeds → move to POST_CASHOUT
-    • If cashout on cooldown → move to CASHOUT_WAIT
-
-CASHOUT_WAIT:
-  Pause all betting.  Sleep (with interrupt checks) until cooldown expires.
-  Display countdown in log.  On expiry → retry cashout → POST_CASHOUT.
-
-POST_CASHOUT:
-  If continue_after_cashout is True AND faucet still has claims available:
-    → reset current_round stats, stay FARMING, aim for same target again.
-  Else → stop session.
-
-This means the bot can cycle indefinitely:
-  claim → bet → cashout → [wait if cooldown] → claim → bet → cashout → …
+State machine
+─────────────
+FARMING      Claim faucet (PAW-aware TTT if needed) → bet toward target.
+             On target reached → attempt cashout if auto_cashout is enabled.
+CASHOUT_WAIT Target hit, cashout on cooldown. Pause betting, countdown, retry.
+POST_CASHOUT Cashout done. If continue_after_cashout → new round; else stop.
+STOPPED      Terminal state.
 """
 
 from __future__ import annotations
@@ -31,9 +19,8 @@ from datetime import datetime, timezone
 from enum import Enum, auto
 from typing import Callable, Optional
 
-from .accounts import Account
 from .api import DuckDiceAPI, CookieExpiredError, RateLimitError
-from .network import NetworkProfileManager, ProfileType
+from .config import BotConfig
 from .tictactoe import TicTacToeClaimEngine
 
 logger = logging.getLogger(__name__)
@@ -44,36 +31,22 @@ class BotError(Exception):
 
 
 class BotState(Enum):
-    FARMING       = auto()   # claiming + betting toward target
-    CASHOUT_WAIT  = auto()   # target hit, waiting for cashout cooldown
-    POST_CASHOUT  = auto()   # cashout done, deciding whether to continue
-    STOPPED       = auto()
+    FARMING      = auto()
+    CASHOUT_WAIT = auto()
+    POST_CASHOUT = auto()
+    STOPPED      = auto()
 
 
 class FaucetBot:
-    """Bot for a single Account.  Instantiate one per account for parallel runs."""
+    """Single-account faucet bot.  Create one instance; call start() in a thread."""
 
     def __init__(
         self,
-        account: Account,
-        network_mgr: NetworkProfileManager,
-        target_amount: float = 20.0,
-        house_edge: float = 0.03,
-        auto_cashout: bool = True,
-        cashout_threshold: float = 0.0,       # 0 = use target_amount
-        cashout_cooldown_hint: int = 3600,     # expected cooldown (s); overridden by API
-        continue_after_cashout: bool = True,   # keep farming after each cashout
+        config: BotConfig,
         log_callback: Optional[Callable[[str], None]] = None,
     ):
-        self.account = account
-        self._net_mgr = network_mgr
-        self.target_amount = target_amount
-        self.house_edge = house_edge
-        self.auto_cashout = auto_cashout
-        self.cashout_threshold = cashout_threshold or target_amount
-        self.cashout_cooldown_hint = cashout_cooldown_hint
-        self.continue_after_cashout = continue_after_cashout
-        self._log_cb = log_callback or (lambda msg: logger.info("[%s] %s", account.label, msg))
+        self._cfg = config
+        self._log_cb = log_callback or (lambda msg: logger.info(msg))
 
         self.running = False
         self.paused  = False
@@ -82,10 +55,12 @@ class FaucetBot:
         self._last_claim_time: float = 0.0
         self.claim_cooldown: int = 60
 
-        # Cashout tracking
-        self._cashout_available_at: float = 0.0   # epoch seconds; 0 = available now
-        self._cashout_count: int = 0
-        self._total_cashed_out: float = 0.0
+        # Derived from config (set at start())
+        self.target_amount: float = 0.0
+        self.cashout_threshold: float = 0.0
+
+        # Cashout cooldown tracking
+        self._cashout_available_at: float = 0.0
 
         self.stats = {
             "session_start":    None,
@@ -97,59 +72,47 @@ class FaucetBot:
             "total_claimed":    0.0,
             "cashout_count":    0,
             "total_cashed_out": 0.0,
-            "rounds_completed": 0,   # how many full target→cashout cycles
+            "rounds_completed": 0,
         }
 
         self._api: Optional[DuckDiceAPI] = None
 
-    # ── Logging ────────────────────────────────────────────────────────────
+    # ── Logging ────────────────────────────────────────────────────
 
     def _log(self, msg: str) -> None:
         ts = datetime.now(timezone.utc).strftime("%H:%M:%S")
         self._log_cb(f"[{ts}] {msg}")
 
-    # ── Network routing ────────────────────────────────────────────────────
-
-    def _build_api(self) -> DuckDiceAPI:
-        proxies: Optional[dict] = None
-        profile_id = self.account.network_profile_id
-        if profile_id:
-            profile = self._net_mgr.get(profile_id)
-            if profile and profile.type == ProfileType.PROXY:
-                proxies = self._net_mgr.get_proxies_dict(profile_id)
-        return DuckDiceAPI(
-            api_key=self.account.api_key,
-            cookie=self.account.cookie,
-            fingerprint=self.account.fingerprint,
-            proxies=proxies,
-        )
-
-    # ── Session lifecycle ──────────────────────────────────────────────────
+    # ── Session lifecycle ──────────────────────────────────────────
 
     def start(self) -> None:
         self.running = True
         self._state  = BotState.FARMING
         self.stats["session_start"] = datetime.now(timezone.utc)
 
-        self._log("=" * 60)
-        self._log(f"🎰 BOT STARTED  |  {self.account.label}")
-        self._log("=" * 60)
+        api_key  = self._cfg.get("api_key", "")
+        cookie   = self._cfg.get("cookie", "")
+        currency = self._cfg.get("currency", "USDC")
+        self.target_amount    = float(self._cfg.get("target_amount") or 20.0)
+        self.cashout_threshold = float(self._cfg.get("cashout_threshold") or 0) or self.target_amount
 
-        self._vpn_connect()
-        self._api = self._build_api()
+        self._api = DuckDiceAPI(api_key=api_key, cookie=cookie)
+
+        self._log("=" * 60)
+        self._log("🎰 FAUCETPLAY STARTED")
+        self._log("=" * 60)
 
         paw = self._api.get_paw_level(force=True)
-        self.account.paw_level = paw
-        self._log(f"🐾 PAW {paw}  |  TTT needed: {self._api.ttt_games_needed()}")
+        self._log(f"🐾 PAW Level {paw}  |  TTT required: {self._api.ttt_games_needed()}")
 
-        currency = self.account.preferred_currency
-        min_bet  = self._api.get_min_bet(currency)
+        min_bet = self._api.get_min_bet(currency)
         self._log(f"💱 {currency}  |  min bet: {min_bet}  |  target: {self.target_amount}")
-        self._log(f"💰 Auto-cashout: {'ON' if self.auto_cashout else 'OFF'}"
-                  + (f"  |  continue after cashout: ON" if self.continue_after_cashout else ""))
+        auto_co = self._cfg.get("auto_cashout", False)
+        self._log(f"💰 Auto-cashout: {'ON' if auto_co else 'OFF'}"
+                  + (f"  threshold: {self.cashout_threshold}" if auto_co else ""))
 
         balance = self._api.get_balance(currency)
-        self.stats["starting_balance"] = balance["faucet"]
+        self.stats["starting_balance"] = balance.get("faucet", 0.0)
 
         self._main_loop(currency, min_bet)
 
@@ -157,7 +120,6 @@ class FaucetBot:
         self.running = False
         self._state = BotState.STOPPED
         self._log("🛑 Bot stopped")
-        self._vpn_disconnect()
 
     def pause(self) -> None:
         self.paused = True
@@ -168,46 +130,17 @@ class FaucetBot:
         self._log("▶  Bot resumed")
 
     def cashout_now(self) -> None:
-        """Manual cashout trigger (called from GUI button)."""
+        """Manual cashout from GUI button."""
         if self._api and self._state in (BotState.FARMING, BotState.CASHOUT_WAIT):
-            currency = self.account.preferred_currency
+            currency = self._cfg.get("currency", "USDC")
             balance  = self._api.get_balance(currency)
-            faucet   = balance["faucet"]
+            faucet   = balance.get("faucet", 0.0)
             if faucet > 0:
                 self._do_cashout(currency, faucet)
 
-    # ── VPN lifecycle ──────────────────────────────────────────────────────
-
-    def _vpn_connect(self) -> None:
-        pid = self.account.network_profile_id
-        if not pid:
-            return
-        profile = self._net_mgr.get(pid)
-        if profile and profile.type == ProfileType.VPN:
-            self._log("🛡 Connecting VPN…")
-            ok = self._net_mgr.vpn_connect(pid)
-            if ok:
-                ip = self._net_mgr.verify_ip(pid)
-                self._log(f"🛡 VPN up  |  IP: {ip or 'unknown'}")
-            else:
-                self.running = False
-                raise BotError("VPN connection failed — aborting for safety.")
-
-    def _vpn_disconnect(self) -> None:
-        pid = self.account.network_profile_id
-        if pid:
-            profile = self._net_mgr.get(pid)
-            if profile and profile.type == ProfileType.VPN:
-                self._net_mgr.vpn_disconnect(pid)
-                self._log("🛡 VPN disconnected")
-
-    # ── Main loop ──────────────────────────────────────────────────────────
+    # ── Main loop ──────────────────────────────────────────────────
 
     def _main_loop(self, currency: str, min_bet: float) -> None:
-        """
-        Outer loop that drives the full
-        FARMING → CASHOUT_WAIT → POST_CASHOUT → FARMING … cycle.
-        """
         while self.running and self._state != BotState.STOPPED:
             self._wait_if_paused()
             if not self.running:
@@ -215,15 +148,13 @@ class FaucetBot:
 
             if self._state == BotState.FARMING:
                 self._farm_one_round(currency, min_bet)
-
             elif self._state == BotState.CASHOUT_WAIT:
                 self._wait_for_cashout(currency)
-
             elif self._state == BotState.POST_CASHOUT:
-                if self.continue_after_cashout:
+                if self._cfg.get("continue_after_cashout", True):
                     self._log("─" * 50)
                     self._log(f"🔄 Round {self.stats['rounds_completed']} complete. "
-                              "Starting new round toward same target…")
+                              "Starting new round…")
                     self.stats["rounds_completed"] += 1
                     self._state = BotState.FARMING
                 else:
@@ -233,12 +164,7 @@ class FaucetBot:
         self._show_stats()
 
     def _farm_one_round(self, currency: str, min_bet: float) -> None:
-        """
-        Inner farming loop: claim → bet → repeat until target reached.
-        Sets self._state on exit.
-        """
         assert self._api is not None
-
         while self.running and self._state == BotState.FARMING:
             self._wait_if_paused()
             if not self.running:
@@ -247,40 +173,33 @@ class FaucetBot:
             try:
                 balance = self._api.get_balance(currency)
             except CookieExpiredError:
-                self._log("🔑 Cookie expired — please update your cookie.")
+                self._log("🔑 Cookie expired — update it in Settings.")
                 self.running = False
                 return
             except RateLimitError as e:
                 self._log(f"⚠️  {e}"); time.sleep(30); continue
 
-            faucet = balance["faucet"]
+            faucet = balance.get("faucet", 0.0)
             self.stats["current_balance"] = faucet
 
-            # ── Target reached ──────────────────────────────────────────
             if faucet >= self.cashout_threshold:
                 self._log(f"🎯 TARGET REACHED: {faucet:.8f} {currency}")
-                if self.auto_cashout:
+                if self._cfg.get("auto_cashout", False):
                     self._trigger_cashout(currency, faucet)
                 else:
-                    self._log("💰 Auto-cashout disabled. Stopping at target.")
+                    self._log("💰 Auto-cashout disabled. Stopping.")
                     self.running = False
                 return
 
-            # ── Need to claim ───────────────────────────────────────────
             if faucet < min_bet:
                 self._do_claim(currency)
                 continue
 
-            # ── Bet ─────────────────────────────────────────────────────
             self._do_bet(currency, faucet)
 
-    # ── Cashout orchestration ──────────────────────────────────────────────
+    # ── Cashout orchestration ──────────────────────────────────────
 
     def _trigger_cashout(self, currency: str, amount: float) -> None:
-        """
-        Try to cashout.  If cooldown is active, transition to CASHOUT_WAIT.
-        """
-        # Quick pre-check (dry-run probe)
         remaining = self._cashout_cooldown_remaining()
         if remaining > 0:
             self._log(f"⏳ Cashout cooldown: {_fmt_duration(remaining)} remaining. "
@@ -288,7 +207,6 @@ class FaucetBot:
             self._cashout_available_at = time.time() + remaining
             self._state = BotState.CASHOUT_WAIT
             return
-
         self._do_cashout(currency, amount)
 
     def _do_cashout(self, currency: str, amount: float) -> None:
@@ -298,82 +216,55 @@ class FaucetBot:
 
         if result["success"]:
             transferred = result["amount"]
-            cooldown    = result["cooldown"]
-            self._cashout_count += 1
-            self._total_cashed_out += transferred
-            self.stats["cashout_count"]    = self._cashout_count
-            self.stats["total_cashed_out"] = self._total_cashed_out
+            cooldown    = result.get("cooldown", 0)
+            self.stats["cashout_count"]    += 1
+            self.stats["total_cashed_out"] += transferred
 
-            self._log(f"✅ Cashout successful: {transferred:.8f} {currency} → main")
+            self._log(f"✅ Cashout OK: {transferred:.8f} {currency} → main")
+            self._cashout_available_at = (time.time() + cooldown) if cooldown > 0 else 0.0
             if cooldown > 0:
-                self._cashout_available_at = time.time() + cooldown
-                self._log(f"⏳ Next cashout available in {_fmt_duration(cooldown)}")
-            else:
-                self._cashout_available_at = 0.0
-
+                self._log(f"⏳ Next cashout in {_fmt_duration(cooldown)}")
             self._state = BotState.POST_CASHOUT
-
         else:
-            cooldown = result.get("cooldown", self.cashout_cooldown_hint)
+            cooldown = result.get("cooldown", self._cfg.get("cashout_cooldown_seconds", 3600))
             self._log(f"⚠️  Cashout failed: {result['message']}")
             if cooldown > 0:
-                self._log(f"⏳ Cooldown: {_fmt_duration(cooldown)} — pausing betting.")
+                self._log(f"⏳ Cooldown: {_fmt_duration(cooldown)} — pausing.")
                 self._cashout_available_at = time.time() + cooldown
                 self._state = BotState.CASHOUT_WAIT
-            else:
-                # Non-cooldown failure: log and continue farming
-                self._log("↩️  Will retry cashout on next target hit.")
 
     def _wait_for_cashout(self, currency: str) -> None:
-        """
-        Sleep until the cashout cooldown expires, logging a countdown every
-        60 s (or every 10 s in the last minute).  Then attempt cashout again.
-        """
         assert self._api is not None
-        self._log("⏸  CASHOUT WAIT — betting suspended until cooldown expires.")
-
+        self._log("⏸  Waiting for cashout cooldown…")
         while self.running and self._state == BotState.CASHOUT_WAIT:
             remaining = self._cashout_cooldown_remaining()
             if remaining <= 0:
                 break
-
-            # Log interval: every 60 s normally, every 10 s in final minute
             interval = 10 if remaining < 60 else 60
-            self._log(f"⏳ Cashout available in {_fmt_duration(remaining)} — "
-                      f"next check in {interval}s")
-
-            # Sleep in 1-second ticks so pause/stop is responsive
+            self._log(f"⏳ Cashout in {_fmt_duration(remaining)} — next check in {interval}s")
             for _ in range(interval):
                 if not self.running:
                     return
                 self._wait_if_paused()
                 time.sleep(1)
-
         if not self.running:
             return
-
-        # Cooldown expired — attempt cashout with current faucet balance
         try:
             balance = self._api.get_balance(currency)
+            faucet  = balance.get("faucet", 0.0)
         except Exception:
-            balance = {"faucet": 0.0}
-
-        faucet = balance.get("faucet", 0.0)
+            faucet = 0.0
         if faucet > 0:
             self._do_cashout(currency, faucet)
         else:
-            # Faucet is empty after cooldown (was bet away / already cashed out)
-            self._log("ℹ️  Faucet is empty after cooldown. Resuming farming.")
             self._state = BotState.POST_CASHOUT
 
     def _cashout_cooldown_remaining(self) -> int:
-        """Seconds until cashout is allowed.  0 = available now."""
         if self._cashout_available_at == 0.0:
             return 0
-        remaining = self._cashout_available_at - time.time()
-        return max(0, int(remaining))
+        return max(0, int(self._cashout_available_at - time.time()))
 
-    # ── Claiming ───────────────────────────────────────────────────────────
+    # ── Claiming ───────────────────────────────────────────────────
 
     def _do_claim(self, currency: str) -> None:
         assert self._api is not None
@@ -391,13 +282,11 @@ class FaucetBot:
 
         games = self._api.ttt_games_needed()
         if games > 0:
-            self._log(f"🎮 PAW {self.account.paw_level}: playing {games} TTT game(s)…")
-            pid = self.account.network_profile_id
-            pw_proxy = self._net_mgr.get_playwright_proxy(pid) if pid else None
+            self._log(f"🎮 PAW level requires {games} TTT game(s)…")
             engine = TicTacToeClaimEngine(
-                cookie=self.account.cookie,
-                fingerprint=self.account.fingerprint,
-                playwright_proxy=pw_proxy,
+                cookie=self._cfg.get("cookie", ""),
+                fingerprint=None,
+                playwright_proxy=None,
             )
             try:
                 ok = engine.run(games_needed=games, currency=currency)
@@ -406,16 +295,17 @@ class FaucetBot:
             if ok:
                 self._last_claim_time = time.time()
                 self.stats["total_claimed"] += 1
-                self._log("✅ Faucet claimed via TTT!")
-                self.account.paw_level = self._api.get_paw_level(force=True)
+                self._log("✅ Claimed via Tic-Tac-Toe!")
+                paw = self._api.get_paw_level(force=True)
+                self._log(f"🐾 PAW updated: {paw}")
             else:
-                self._log("❌ TTT claim failed. Retry in 10s…"); time.sleep(10)
+                self._log("❌ TTT failed. Retry in 10s…"); time.sleep(10)
         else:
-            self._log("🔵 Claiming faucet (direct)…")
+            self._log("🔵 Claiming faucet…")
             try:
                 ok = self._api.claim_faucet(currency)
             except CookieExpiredError:
-                self._log("🔑 Cookie expired during claim."); self.running = False; return
+                self._log("🔑 Cookie expired."); self.running = False; return
             if ok:
                 self._last_claim_time = time.time()
                 self.stats["total_claimed"] += 1
@@ -424,22 +314,22 @@ class FaucetBot:
             else:
                 self._log("❌ Claim failed. Retry in 10s…"); time.sleep(10)
 
-    # ── Betting ────────────────────────────────────────────────────────────
+    # ── Betting ────────────────────────────────────────────────────
 
     def _do_bet(self, currency: str, faucet: float) -> None:
         assert self._api is not None
+        house_edge = float(self._cfg.get("house_edge", 0.03))
         multiplier = self.cashout_threshold / faucet if faucet else 0
-        raw_chance = (100.0 * (1.0 - self.house_edge)) / multiplier if multiplier else 0.0
-        chance = max(0.01, min(99.0, round(raw_chance, 2)))
+        raw_chance = (100.0 * (1.0 - house_edge)) / multiplier if multiplier else 0.0
+        chance     = max(0.01, min(99.0, round(raw_chance, 2)))
 
-        self._log(f"🎲 {faucet:.8f} {currency}  |  {multiplier:.2f}x needed  |  "
-                  f"chance: {chance:.2f}%")
+        self._log(f"🎲 {faucet:.8f} {currency}  ×{multiplier:.2f}  chance {chance:.2f}%")
 
         try:
             result = self._api.play_dice(currency, faucet, chance,
                                          is_high=True, use_faucet=True)
         except CookieExpiredError:
-            self._log("🔑 Cookie expired during bet."); self.running = False; return
+            self._log("🔑 Cookie expired."); self.running = False; return
         except RateLimitError as e:
             self._log(f"⚠️  {e}"); time.sleep(30); return
 
@@ -455,10 +345,10 @@ class FaucetBot:
                 self.stats["total_losses"] += 1
                 self._log(f"❌ Lost.  Faucet: {new_bal:.8f} {currency}")
         else:
-            self._log("❌ Bet failed (no response).")
+            self._log("❌ Bet failed.")
         time.sleep(2)
 
-    # ── Helpers ────────────────────────────────────────────────────────────
+    # ── Helpers ────────────────────────────────────────────────────
 
     def _wait_if_paused(self) -> None:
         while self.paused and self.running:
@@ -470,33 +360,29 @@ class FaucetBot:
         self._log("=" * 60)
         start = self.stats["session_start"]
         if start:
-            self._log(f"Duration:        {datetime.now(timezone.utc) - start}")
-        self._log(f"Rounds:          {self.stats['rounds_completed']}")
-        self._log(f"Total bets:      {self.stats['total_bets']}")
+            self._log(f"Duration:    {datetime.now(timezone.utc) - start}")
+        self._log(f"Rounds:      {self.stats['rounds_completed']}")
         n = self.stats["total_bets"]
         if n:
             wr = self.stats["total_wins"] / n * 100
-            self._log(f"Wins/Losses:     {self.stats['total_wins']} / "
-                      f"{self.stats['total_losses']}  ({wr:.1f}%)")
-        self._log(f"Claims made:     {self.stats['total_claimed']}")
-        self._log(f"Cashouts:        {self.stats['cashout_count']}  "
-                  f"(total: {self.stats['total_cashed_out']:.8f})")
+            self._log(f"Bets:        {n}  W/L: {self.stats['total_wins']}/{self.stats['total_losses']}  ({wr:.1f}%)")
+        self._log(f"Claims:      {self.stats['total_claimed']}")
+        self._log(f"Cashouts:    {self.stats['cashout_count']}  total: {self.stats['total_cashed_out']:.8f}")
         profit = self.stats["current_balance"] - self.stats["starting_balance"]
-        self._log(f"Faucet P/L:      {profit:+.8f}")
+        self._log(f"Faucet P/L:  {profit:+.8f}")
         self._log("=" * 60)
 
     def get_stats(self) -> dict:
         return self.stats.copy()
 
     def get_cashout_countdown(self) -> int:
-        """Seconds remaining until next cashout (for GUI display)."""
         return self._cashout_cooldown_remaining()
 
     def get_state(self) -> str:
         return self._state.name
 
 
-# ── Utility ────────────────────────────────────────────────────────────────
+# ── Utility ────────────────────────────────────────────────────────
 
 def _fmt_duration(seconds: int) -> str:
     h, r = divmod(seconds, 3600)

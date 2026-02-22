@@ -1,1 +1,1 @@
-"""FaucetPlay GUI package."""
+"""FaucetPlay GUI package"""

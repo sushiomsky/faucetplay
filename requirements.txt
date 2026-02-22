@@ -1,11 +1,10 @@
-# HTTP & networking
+# HTTP
 requests>=2.31.0
-PySocks>=1.7.1          # SOCKS4/5 proxy support for requests
 
-# Headless browser (TTT engine for PAW 0-3)
+# Headless browser (Tic-Tac-Toe engine for PAW 0-3)
 playwright>=1.44.0
 
-# Encryption
+# Encryption (config storage)
 cryptography>=41.0.0
 
 # GUI
