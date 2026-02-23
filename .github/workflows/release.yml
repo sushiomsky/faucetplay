@@ -57,37 +57,48 @@ jobs:
           path: FaucetPlay-Windows.zip
 
   # ─────────────────────────────────────────────────────────────────
-  # macOS Intel — x86_64, supports macOS 10.15 Catalina and newer
+  # macOS Intel — x86_64, built on arm64 runner via Rosetta 2
+  # Supports macOS 10.15 Catalina and newer on Intel Macs
   # ─────────────────────────────────────────────────────────────────
   build-macos-intel:
-    runs-on: macos-13        # last Intel runner
+    runs-on: macos-14        # arm64 runner (macos-13 not on free plan)
     env:
       MACOSX_DEPLOYMENT_TARGET: "10.15"
+      PY: /Library/Frameworks/Python.framework/Versions/3.11/bin/python3
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
+      - name: Install Rosetta 2
+        run: softwareupdate --install-rosetta --agree-to-license
 
-      - name: Install dependencies
+      - name: Install official x86_64 Python 3.11 (universal2)
         run: |
-          pip install -r requirements.txt
-          playwright install chromium --with-deps
+          curl -fLO https://www.python.org/ftp/python/3.11.9/python-3.11.9-macos11.pkg
+          sudo installer -pkg python-3.11.9-macos11.pkg -target /
+          arch -x86_64 $PY --version
+
+      - name: Install dependencies (x86_64)
+        run: |
+          arch -x86_64 $PY -m pip install --upgrade pip
+          arch -x86_64 $PY -m pip install -r requirements.txt
+          arch -x86_64 $PY -m playwright install chromium --with-deps
 
       - name: Inject feedback token
-        shell: python
         env:
           FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
         run: |
+          arch -x86_64 $PY -c "
           import os, pathlib
           token = os.environ.get('FEEDBACK_TOKEN', '')
           p = pathlib.Path('core/version.py')
           p.write_text(p.read_text(encoding='utf-8').replace('@FEEDBACK_TOKEN@', token), encoding='utf-8')
+          "
 
-      - name: Build with PyInstaller
-        run: pyinstaller faucetplay.spec
+      - name: Build Intel binary with PyInstaller
+        run: arch -x86_64 $PY -m PyInstaller faucetplay.spec
+
+      - name: Verify binary architecture
+        run: file dist/FaucetPlay/FaucetPlay | grep -i x86_64
 
       - name: Create DMG
         run: |
@@ -98,9 +109,9 @@ jobs:
             --icon-size 96 \
             --app-drop-link 360 145 \
             "FaucetPlay-macOS-Intel.dmg" \
-            "dist/FaucetPlay.app" \
+            "dist/FaucetPlay" \
           || hdiutil create -volname FaucetPlay \
-               -srcfolder dist/FaucetPlay.app \
+               -srcfolder dist/FaucetPlay \
                -ov -format UDZO \
                FaucetPlay-macOS-Intel.dmg
 
