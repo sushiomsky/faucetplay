@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,13 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.2.0 — In-app feedback (no account needed)
+  • 🐛 Report Bug / 💡 Feature Request buttons in Settings → About
+  • Submits directly to GitHub Issues — zero login required
+  • Auto-attaches: app version, OS, Python version, last 30 log lines
+  • Success screen with link to view your submitted report
+  • Dev builds fall back to pre-filled browser URL
+
 v1.1.0 — Reliability & code quality
   • Fix win/cashout toasts never firing (poll-cycle tracking bug)
   • Main Balance card now shows live balance after cashout
