@@ -41,7 +41,7 @@ jobs:
           import os, pathlib
           token = os.environ.get('FEEDBACK_TOKEN', '')
           p = pathlib.Path('core/version.py')
-          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
+          p.write_text(p.read_text(encoding='utf-8').replace('@FEEDBACK_TOKEN@', token), encoding='utf-8')
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
@@ -84,7 +84,7 @@ jobs:
           import os, pathlib
           token = os.environ.get('FEEDBACK_TOKEN', '')
           p = pathlib.Path('core/version.py')
-          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
+          p.write_text(p.read_text(encoding='utf-8').replace('@FEEDBACK_TOKEN@', token), encoding='utf-8')
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
@@ -136,7 +136,7 @@ jobs:
           import os, pathlib
           token = os.environ.get('FEEDBACK_TOKEN', '')
           p = pathlib.Path('core/version.py')
-          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
+          p.write_text(p.read_text(encoding='utf-8').replace('@FEEDBACK_TOKEN@', token), encoding='utf-8')
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
@@ -196,7 +196,7 @@ jobs:
           import os, pathlib
           token = os.environ.get('FEEDBACK_TOKEN', '')
           p = pathlib.Path('core/version.py')
-          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
+          p.write_text(p.read_text(encoding='utf-8').replace('@FEEDBACK_TOKEN@', token), encoding='utf-8')
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
