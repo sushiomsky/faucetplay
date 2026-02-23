@@ -316,8 +316,7 @@ class DuckDiceAPI:
                        or data.get("cooldown"))
             if next_ts:
                 try:
-                    import time as _time
-                    cooldown = max(0, int(float(next_ts)) - int(_time.time()))
+                    cooldown = max(0, int(float(next_ts)) - int(time.time()))
                 except (ValueError, TypeError):
                     cooldown = 0
 
@@ -364,8 +363,3 @@ class DuckDiceAPI:
             return 0
         except Exception:
             return 0   # assume available; real call will catch it
-
-    def withdraw(self, currency: str, amount: float, address: str) -> Optional[Dict]:
-        """Withdraw to external wallet (endpoint TBD)."""
-        logger.warning("withdraw: API endpoint not yet confirmed — skipping")
-        return None

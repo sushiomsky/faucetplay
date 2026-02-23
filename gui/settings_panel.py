@@ -296,7 +296,12 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._cfg.set("auto_cashout",          self._auto_co_var.get())
         self._cfg.set("continue_after_cashout", self._continue_var.get())
         self._cfg.set("scheduler_enabled",     self._sched_on_var.get())
-        self._cfg.set("jitter_minutes",        int(self._jitter_var.get() or "5"))
+        try:
+            jitter = max(0, int(self._jitter_var.get() or "5"))
+        except ValueError:
+            jitter = 5
+            self._jitter_var.set("5")
+        self._cfg.set("jitter_minutes", jitter)
 
         times = [t.get().strip() for t in self._time_vars if t.get().strip()]
         self._cfg.set("schedules", times)
@@ -305,8 +310,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         # Update scheduler live
         if self._sched_on_var.get() and times:
-            self._sched.set_claim_times(times,
-                                         jitter_minutes=int(self._jitter_var.get() or "5"))
+            self._sched.set_claim_times(times, jitter_minutes=jitter)
 
         # Auto-start registration
         if self._autostart_var.get():

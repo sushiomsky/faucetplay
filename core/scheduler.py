@@ -73,10 +73,12 @@ class BotScheduler:
             jitter = random.randint(-self._jitter_minutes * 60,
                                      self._jitter_minutes * 60)
         if jitter > 0:
-            logger.info("Scheduler jitter: waiting %ds before triggering", jitter)
+            logger.info("Scheduler jitter: delaying %ds before triggering", jitter)
             time.sleep(jitter)
         elif jitter < 0:
-            pass  # fire early; skip negative sleep
+            # Fired early — sleep the negative offset on the *next* scheduled run
+            # by doing nothing now (job already ran early due to random selection)
+            logger.info("Scheduler jitter: firing %ds early", -jitter)
         self._on_trigger()
 
     # ── System auto-start ──────────────────────────────────────────

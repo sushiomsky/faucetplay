@@ -165,7 +165,8 @@ class FaucetBot:
         self._show_stats()
 
     def _farm_one_round(self, currency: str, min_bet: float) -> None:
-        assert self._api is not None
+        if not self._api:
+            raise BotError("Bot not started — call start() first")
         while self.running and self._state == BotState.FARMING:
             self._wait_if_paused()
             if not self.running:
@@ -211,7 +212,8 @@ class FaucetBot:
         self._do_cashout(currency, amount)
 
     def _do_cashout(self, currency: str, amount: float) -> None:
-        assert self._api is not None
+        if not self._api:
+            raise BotError("Bot not started — call start() first")
         self._log(f"💰 Cashing out {amount:.8f} {currency} → main wallet…")
         result = self._api.cashout(currency, amount)
 
@@ -242,7 +244,8 @@ class FaucetBot:
                 self._state = BotState.CASHOUT_WAIT
 
     def _wait_for_cashout(self, currency: str) -> None:
-        assert self._api is not None
+        if not self._api:
+            raise BotError("Bot not started — call start() first")
         self._log("⏸  Waiting for cashout cooldown…")
         while self.running and self._state == BotState.CASHOUT_WAIT:
             remaining = self._cashout_cooldown_remaining()
@@ -275,7 +278,8 @@ class FaucetBot:
     # ── Claiming ───────────────────────────────────────────────────
 
     def _do_claim(self, currency: str) -> None:
-        assert self._api is not None
+        if not self._api:
+            raise BotError("Bot not started — call start() first")
         elapsed = time.time() - self._last_claim_time
         if elapsed < self.claim_cooldown:
             wait = int(self.claim_cooldown - elapsed)
@@ -323,10 +327,18 @@ class FaucetBot:
     # ── Betting ────────────────────────────────────────────────────
 
     def _do_bet(self, currency: str, faucet: float) -> None:
-        assert self._api is not None
+        if not self._api:
+            raise BotError("Bot not started — call start() first")
+
+        min_bet = self._api.get_min_bet(currency)
+        if faucet < min_bet:
+            self._log(f"⚠️  Balance {faucet:.8f} below min bet {min_bet:.8f} — claiming instead")
+            self._do_claim(currency)
+            return
+
         house_edge = float(self._cfg.get("house_edge", 0.03))
-        multiplier = self.cashout_threshold / faucet if faucet else 0
-        raw_chance = (100.0 * (1.0 - house_edge)) / multiplier if multiplier else 0.0
+        multiplier = self.cashout_threshold / faucet
+        raw_chance = (100.0 * (1.0 - house_edge)) / multiplier
         chance     = max(0.01, min(99.0, round(raw_chance, 2)))
 
         self._log(f"🎲 {faucet:.8f} {currency}  ×{multiplier:.2f}  chance {chance:.2f}%")

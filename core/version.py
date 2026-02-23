@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -17,6 +17,17 @@ GITHUB_API_LATEST = (
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.1.0 — Reliability & code quality
+  • Fix win/cashout toasts never firing (poll-cycle tracking bug)
+  • Main Balance card now shows live balance after cashout
+  • Bet guard: redirects to claim if balance falls below min_bet
+  • assert → BotError raise (safe under python -O)
+  • Config: proper logging + InvalidToken warning on decrypt fail
+  • Scheduler: negative jitter now logs correctly instead of silently dropping
+  • Settings: jitter field validates input, no more int() crash on bad value
+  • Remove stale withdraw() stub and inline import time alias
+  • Removed obsolete files from repo (scheduler_panel, faucetplay.py, etc.)
+
 v1.0.0 — Initial release
   • Single-account faucet farming with PAW-aware claiming
   • Auto-cashout loop with cooldown wait
