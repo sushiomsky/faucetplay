@@ -14,6 +14,13 @@ GITHUB_RELEASES  = f"https://github.com/{GITHUB_REPO_FULL}/releases"
 GITHUB_API_LATEST = (
     f"https://api.github.com/repos/{GITHUB_REPO_FULL}/releases/latest"
 )
+GITHUB_API_ISSUES = (
+    f"https://api.github.com/repos/{GITHUB_REPO_FULL}/issues"
+)
+
+# Bot token injected at build time (CI replaces @FEEDBACK_TOKEN@ via secret).
+# Empty string → fallback to browser URL when running from source.
+FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\

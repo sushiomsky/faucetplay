@@ -33,6 +33,16 @@ jobs:
           pip install -r requirements.txt
           playwright install chromium --with-deps
 
+      - name: Inject feedback token
+        shell: python
+        env:
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
+        run: |
+          import os, pathlib
+          token = os.environ.get('FEEDBACK_TOKEN', '')
+          p = pathlib.Path('core/version.py')
+          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
+
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
 
@@ -63,6 +73,16 @@ jobs:
         run: |
           pip install -r requirements.txt
           playwright install chromium --with-deps
+
+      - name: Inject feedback token
+        shell: python
+        env:
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
+        run: |
+          import os, pathlib
+          token = os.environ.get('FEEDBACK_TOKEN', '')
+          p = pathlib.Path('core/version.py')
+          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
@@ -113,6 +133,16 @@ jobs:
         run: |
           pip install -r requirements.txt
           playwright install chromium --with-deps
+
+      - name: Inject feedback token
+        shell: python
+        env:
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
+        run: |
+          import os, pathlib
+          token = os.environ.get('FEEDBACK_TOKEN', '')
+          p = pathlib.Path('core/version.py')
+          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
