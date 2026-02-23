@@ -1,37 +1,34 @@
 ---
 name: Bug Report
-about: Report a bug or issue
+about: Report a bug — or use the in-app "🐛 Report Bug" button (Settings → About) for auto-filled details
 title: '[BUG] '
 labels: bug
 assignees: ''
 ---
 
-## Description
+## Describe the bug
 A clear description of the bug.
 
-## Steps to Reproduce
-1. Go to '...'
-2. Click on '...'
-3. See error
+## Steps to reproduce
+1. 
+2. 
+3. 
 
-## Expected Behavior
+## Expected behaviour
 What you expected to happen.
 
-## Actual Behavior
+## Actual behaviour
 What actually happened.
 
 ## Environment
-- OS: [e.g., Windows 10, macOS 13, Ubuntu 22.04]
-- Python Version: [e.g., 3.11.0]
-- Bot Version: [e.g., v1.0.0]
+- **App version:** <!-- e.g. v1.1.0 -->
+- **OS:** <!-- e.g. Windows 11, macOS 14, Ubuntu 22.04 -->
+- **Python:** <!-- e.g. 3.11.0 — only if running from source -->
 
-## Screenshots
-If applicable, add screenshots.
-
-## Logs
+## Recent log output
 ```
-Paste relevant logs here
+Paste relevant log lines here (or use the in-app reporter to auto-attach them)
 ```
 
-## Additional Context
-Any other information about the problem.
+## Additional context
+Any other information that might help.

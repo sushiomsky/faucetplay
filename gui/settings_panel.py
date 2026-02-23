@@ -12,6 +12,7 @@ from typing import Callable, List, Optional
 import customtkinter as ctk
 
 from . import theme as T
+from .feedback_dialog import FeedbackDialog
 from core.api import DuckDiceAPI
 from core.config import BotConfig
 from core.scheduler import BotScheduler
@@ -224,6 +225,18 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         )
         self._check_upd_btn.pack(side="left")
 
+        # ── Feedback buttons ──────────────────────────────────────
+        feedback_row = ctk.CTkFrame(about_card, fg_color="transparent")
+        feedback_row.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(feedback_row, text="🐛 Report Bug", width=130, height=30,
+                       fg_color=T.RED, hover_color="#c0392b", font=T.FONT_SMALL,
+                       command=lambda: self._open_feedback("bug"),
+                       ).pack(side="left", padx=(0, 6))
+        ctk.CTkButton(feedback_row, text="💡 Feature Request", width=150, height=30,
+                       fg_color=T.BG3, font=T.FONT_SMALL,
+                       command=lambda: self._open_feedback("feature"),
+                       ).pack(side="left")
+
         cl_box = ctk.CTkTextbox(about_card, height=90, fg_color=T.BG,
                                  font=T.FONT_MONO, state="normal")
         cl_box.insert("end", CHANGELOG)
@@ -248,6 +261,10 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             self._update_lbl.configure(
                 text=f"🆕 v{info.version} available!", text_color=T.GOLD)
             _UC.open_download_page(info.release_url)
+
+    def _open_feedback(self, report_type: str):
+        """Open the in-app feedback dialog (bug or feature)."""
+        FeedbackDialog(self, report_type=report_type)
 
     # ── Test connection ────────────────────────────────────────
 

@@ -1,22 +1,22 @@
 ---
 name: Feature Request
-about: Suggest a new feature
+about: Suggest a new feature — or use the in-app "💡 Feature Request" button (Settings → About)
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
 ---
 
-## Feature Description
+## Summary
 A clear description of the feature you'd like to see.
 
-## Use Case
-Explain why this feature would be useful.
+## Motivation / use-case
+Why would this be useful? What problem does it solve?
 
-## Proposed Solution
+## Proposed solution
 How you think this could be implemented.
 
-## Alternatives Considered
-Other solutions you've thought about.
+## Alternatives considered
+Other solutions or workarounds you've thought about.
 
-## Additional Context
+## Additional context
 Any other information, mockups, or examples.
