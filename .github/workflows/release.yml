@@ -57,9 +57,63 @@ jobs:
           path: FaucetPlay-Windows.zip
 
   # ─────────────────────────────────────────────────────────────────
-  # macOS — produces FaucetPlay-macOS.dmg  (arm64 + x86_64)
+  # macOS Intel — x86_64, supports macOS 10.15 Catalina and newer
   # ─────────────────────────────────────────────────────────────────
-  build-macos:
+  build-macos-intel:
+    runs-on: macos-13        # last Intel runner
+    env:
+      MACOSX_DEPLOYMENT_TARGET: "10.15"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium --with-deps
+
+      - name: Inject feedback token
+        shell: python
+        env:
+          FEEDBACK_TOKEN: ${{ secrets.FEEDBACK_TOKEN }}
+        run: |
+          import os, pathlib
+          token = os.environ.get('FEEDBACK_TOKEN', '')
+          p = pathlib.Path('core/version.py')
+          p.write_text(p.read_text().replace('@FEEDBACK_TOKEN@', token))
+
+      - name: Build with PyInstaller
+        run: pyinstaller faucetplay.spec
+
+      - name: Create DMG
+        run: |
+          brew install create-dmg || true
+          create-dmg \
+            --volname "FaucetPlay" \
+            --window-size 500 320 \
+            --icon-size 96 \
+            --app-drop-link 360 145 \
+            "FaucetPlay-macOS-Intel.dmg" \
+            "dist/FaucetPlay.app" \
+          || hdiutil create -volname FaucetPlay \
+               -srcfolder dist/FaucetPlay.app \
+               -ov -format UDZO \
+               FaucetPlay-macOS-Intel.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: FaucetPlay-macOS-Intel
+          path: FaucetPlay-macOS-Intel.dmg
+
+  # ─────────────────────────────────────────────────────────────────
+  # macOS Apple Silicon — arm64, M1/M2/M3/M4
+  # ─────────────────────────────────────────────────────────────────
+  build-macos-arm:
     runs-on: macos-14        # Apple Silicon runner
     steps:
       - uses: actions/checkout@v4
@@ -95,18 +149,18 @@ jobs:
             --window-size 500 320 \
             --icon-size 96 \
             --app-drop-link 360 145 \
-            "FaucetPlay-macOS.dmg" \
+            "FaucetPlay-macOS-AppleSilicon.dmg" \
             "dist/FaucetPlay.app" \
           || hdiutil create -volname FaucetPlay \
                -srcfolder dist/FaucetPlay.app \
                -ov -format UDZO \
-               FaucetPlay-macOS.dmg
+               FaucetPlay-macOS-AppleSilicon.dmg
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: FaucetPlay-macOS
-          path: FaucetPlay-macOS.dmg
+          name: FaucetPlay-macOS-AppleSilicon
+          path: FaucetPlay-macOS-AppleSilicon.dmg
 
   # ─────────────────────────────────────────────────────────────────
   # Linux — produces FaucetPlay-Linux.tar.gz  (x86_64)
@@ -181,7 +235,7 @@ jobs:
   # Create GitHub Release and attach all three packages
   # ─────────────────────────────────────────────────────────────────
   release:
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos-intel, build-macos-arm, build-linux]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/')
     steps:
@@ -202,8 +256,11 @@ jobs:
           echo "| Platform | File | Notes |" >> notes.md
           echo "|----------|------|-------|" >> notes.md
           echo "| 🪟 Windows | \`FaucetPlay-Windows.zip\` | Extract and run \`FaucetPlay.exe\` |" >> notes.md
-          echo "| 🍎 macOS   | \`FaucetPlay-macOS.dmg\`   | Open DMG and drag to Applications |" >> notes.md
-          echo "| 🐧 Linux   | \`FaucetPlay-Linux.tar.gz\` | Extract and run \`./faucetplay.sh\` |" >> notes.md
+          echo "| 🍎 macOS Intel | \`FaucetPlay-macOS-Intel.dmg\` | 2015–2020 Macs (Core i5/i7/i9) — macOS 10.15+ |" >> notes.md
+          echo "| 🍎 macOS Apple Silicon | \`FaucetPlay-macOS-AppleSilicon.dmg\` | M1/M2/M3/M4 Macs — macOS 11+ |" >> notes.md
+          echo "| 🐧 Linux | \`FaucetPlay-Linux.tar.gz\` | Extract and run \`./faucetplay.sh\` |" >> notes.md
+          echo "" >> notes.md
+          echo "> **Not sure which Mac you have?** Apple menu → About This Mac. If Chip shows Intel, use the Intel build. If it shows M1/M2/M3/M4, use Apple Silicon." >> notes.md
           echo "" >> notes.md
           echo "### First run" >> notes.md
           echo "On first launch the setup wizard guides you through:" >> notes.md
@@ -224,7 +281,8 @@ jobs:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             dist-packages/FaucetPlay-Windows/FaucetPlay-Windows.zip
-            dist-packages/FaucetPlay-macOS/FaucetPlay-macOS.dmg
+            dist-packages/FaucetPlay-macOS-Intel/FaucetPlay-macOS-Intel.dmg
+            dist-packages/FaucetPlay-macOS-AppleSilicon/FaucetPlay-macOS-AppleSilicon.dmg
             dist-packages/FaucetPlay-Linux/FaucetPlay-Linux.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

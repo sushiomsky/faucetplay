@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.1"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,11 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.2.1 — macOS compatibility fix
+  • Split macOS build: Intel DMG (macOS 10.15+) + Apple Silicon DMG (M1–M4)
+  • Intel build sets MACOSX_DEPLOYMENT_TARGET=10.15 (Catalina and newer)
+  • Release notes now show which DMG to pick
+
 v1.2.0 — In-app feedback (no account needed)
   • 🐛 Report Bug / 💡 Feature Request buttons in Settings → About
   • Submits directly to GitHub Issues — zero login required
