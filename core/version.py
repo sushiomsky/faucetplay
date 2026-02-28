@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.2.1"
+APP_VERSION = "1.3.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,13 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.3.0 — Multiple betting strategies
+  • 6 betting modes: All-In, Martingale, Reverse Martingale, Fixed %, D'Alembert, Fibonacci
+  • Strategy selector in Settings → Betting Mode with context-sensitive fields
+  • Bot tracks win/loss per roll and passes it to active strategy
+  • Strategy state resets cleanly between rounds after cashout
+  • 30 new unit tests covering all strategies and the factory
+
 v1.2.1 — macOS compatibility fix
   • Split macOS build: Intel DMG (macOS 10.15+) + Apple Silicon DMG (M1–M4)
   • Intel build sets MACOSX_DEPLOYMENT_TARGET=10.15 (Catalina and newer)

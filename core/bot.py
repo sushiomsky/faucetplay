@@ -22,6 +22,7 @@ from typing import Callable, Optional
 from .api import DuckDiceAPI, CookieExpiredError, RateLimitError
 from .config import BotConfig
 from .tictactoe import TicTacToeClaimEngine
+from .strategies import BettingStrategy, make_strategy
 
 logger = logging.getLogger(__name__)
 
@@ -62,6 +63,10 @@ class FaucetBot:
         # Cashout cooldown tracking
         self._cashout_available_at: float = 0.0
 
+        # Strategy
+        self._strategy: Optional[BettingStrategy] = None
+        self._last_win: Optional[bool] = None
+
         self.stats = {
             "session_start":    None,
             "total_bets":       0,
@@ -99,6 +104,11 @@ class FaucetBot:
 
         self._api = DuckDiceAPI(api_key=api_key, cookie=cookie)
 
+        # Instantiate betting strategy from config
+        strategy_name = self._cfg.get("strategy", "all_in")
+        self._strategy = make_strategy(strategy_name, self._cfg.get_all())
+        self._last_win = None
+
         self._log("=" * 60)
         self._log("🎰 FAUCETPLAY STARTED")
         self._log("=" * 60)
@@ -111,6 +121,9 @@ class FaucetBot:
         auto_co = self._cfg.get("auto_cashout", False)
         self._log(f"💰 Auto-cashout: {'ON' if auto_co else 'OFF'}"
                   + (f"  threshold: {self.cashout_threshold}" if auto_co else ""))
+
+        strategy_name = self._cfg.get("strategy", "all_in")
+        self._log(f"🎯 Strategy: {strategy_name.replace('_', ' ').title()}")
 
         balance = self._api.get_balance(currency)
         self.stats["starting_balance"] = balance.get("faucet", 0.0)
@@ -157,6 +170,9 @@ class FaucetBot:
                     self._log(f"🔄 Round {self.stats['rounds_completed']} complete. "
                               "Starting new round…")
                     self.stats["rounds_completed"] += 1
+                    self._last_win = None
+                    if self._strategy:
+                        self._strategy.reset()
                     self._state = BotState.FARMING
                 else:
                     self._log("✅ continue_after_cashout is OFF — stopping.")
@@ -336,15 +352,30 @@ class FaucetBot:
             self._do_claim(currency)
             return
 
-        house_edge = float(self._cfg.get("house_edge", 0.03))
-        multiplier = self.cashout_threshold / faucet
-        raw_chance = (100.0 * (1.0 - house_edge)) / multiplier
-        chance     = max(0.01, min(99.0, round(raw_chance, 2)))
+        if self._strategy is None:
+            self._strategy = make_strategy(
+                self._cfg.get("strategy", "all_in"), self._cfg.get_all()
+            )
 
-        self._log(f"🎲 {faucet:.8f} {currency}  ×{multiplier:.2f}  chance {chance:.2f}%")
+        house_edge = float(self._cfg.get("house_edge", 0.03))
+        amount, chance = self._strategy.next_bet(
+            faucet_balance=faucet,
+            min_bet=min_bet,
+            cashout_threshold=self.cashout_threshold,
+            house_edge=house_edge,
+            last_win=self._last_win,
+        )
+        # Safety clamps
+        amount = max(min_bet, min(amount, faucet))
+        chance = max(0.01, min(99.0, chance))
+
+        multiplier = faucet / amount if amount > 0 else 1.0
+        self._log(
+            f"🎲 {amount:.8f} {currency}  ×{multiplier:.2f}  chance {chance:.2f}%"
+        )
 
         try:
-            result = self._api.play_dice(currency, faucet, chance,
+            result = self._api.play_dice(currency, amount, chance,
                                          is_high=True, use_faucet=True)
         except CookieExpiredError:
             self._log("🔑 Cookie expired."); self.running = False; return
@@ -356,6 +387,7 @@ class FaucetBot:
             data    = result.get("data", {})
             new_bal = float(data.get("balance", {}).get("faucet", 0))
             win     = data.get("win", False)
+            self._last_win = win
             if win:
                 self.stats["total_wins"] += 1
                 self._log(f"🎉 WON!  Faucet: {new_bal:.8f} {currency}")
@@ -363,6 +395,7 @@ class FaucetBot:
                 self.stats["total_losses"] += 1
                 self._log(f"❌ Lost.  Faucet: {new_bal:.8f} {currency}")
         else:
+            self._last_win = None
             self._log("❌ Bet failed.")
         time.sleep(2)
 

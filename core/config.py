@@ -39,6 +39,11 @@ class BotConfig:
             "scheduler_enabled":        False,
             "schedules":                [],
             "jitter_minutes":           5,
+            # Betting strategy
+            "strategy":               "all_in",
+            "strategy_base_bet":      0.001,
+            "strategy_bet_percent":   1.0,
+            "strategy_chance":        49.5,
         }
 
     def _get_cipher(self) -> Fernet:

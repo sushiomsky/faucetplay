@@ -16,6 +16,7 @@ from .feedback_dialog import FeedbackDialog
 from core.api import DuckDiceAPI
 from core.config import BotConfig
 from core.scheduler import BotScheduler
+from core.strategies import STRATEGY_LABELS, STRATEGY_NAMES
 
 
 class SettingsPanel(ctk.CTkScrollableFrame):
@@ -40,6 +41,13 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._continue_var   = tk.BooleanVar(value=bool(config.get("continue_after_cashout", True)))
         self._sched_on_var   = tk.BooleanVar(value=bool(config.get("scheduler_enabled", False)))
         self._autostart_var  = tk.BooleanVar(value=False)
+
+        # Strategy vars
+        saved_strategy = config.get("strategy", "all_in")
+        self._strategy_var      = tk.StringVar(value=STRATEGY_LABELS.get(saved_strategy, "All-In"))
+        self._base_bet_var      = tk.StringVar(value=str(config.get("strategy_base_bet", "0.001")))
+        self._bet_percent_var   = tk.StringVar(value=str(config.get("strategy_bet_percent", "1.0")))
+        self._strat_chance_var  = tk.StringVar(value=str(config.get("strategy_chance", "49.5")))
 
         # Schedule time entries (up to 3 claim times)
         saved_times: List[str] = config.get("schedules", []) or []
@@ -140,6 +148,66 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         ctk.CTkLabel(self, text="Default 0.03 (3%). Lower = safer but slower.",
                       font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(
             anchor="w", padx=(164, 0), pady=(0, 4))
+
+        # ── Betting Mode ─────────────────────────────────────────
+        _section("🎯  Betting Mode")
+
+        _label_to_name = {v: k for k, v in STRATEGY_LABELS.items()}
+        _label_list    = [STRATEGY_LABELS[n] for n in STRATEGY_NAMES]
+
+        def _on_strategy_change(label: str):
+            name = _label_to_name.get(label, "all_in")
+            # Update description label
+            from core.strategies import STRATEGIES
+            cls = STRATEGIES.get(name)
+            _desc_lbl.configure(text=cls.DESCRIPTION if cls else "")
+            # Show/hide sub-option frames
+            is_all_in  = name == "all_in"
+            is_percent = name == "fixed_percent"
+            _base_row_frame.pack_forget() if is_all_in else _base_row_frame.pack(fill="x", pady=3)
+            _pct_row_frame.pack(fill="x", pady=3) if is_percent else _pct_row_frame.pack_forget()
+            _chance_row_frame.pack_forget() if is_all_in else _chance_row_frame.pack(fill="x", pady=3)
+
+        _row("Strategy", lambda p: ctk.CTkOptionMenu(
+            p, variable=self._strategy_var, height=32,
+            values=_label_list,
+            fg_color=T.BG3, button_color=T.BG3, button_hover_color=T.BG2,
+            command=_on_strategy_change,
+        ))
+
+        _desc_lbl = ctk.CTkLabel(self, text="", font=T.FONT_SMALL,
+                                  text_color=T.TEXT_DIM, wraplength=480, justify="left")
+        _desc_lbl.pack(anchor="w", padx=(164, 0), pady=(0, 2))
+
+        # Base bet (hidden for All-In)
+        _base_row_frame = ctk.CTkFrame(self, fg_color="transparent")
+        ctk.CTkLabel(_base_row_frame, text="Base bet", width=160, anchor="w",
+                      font=T.FONT_BODY, text_color=T.TEXT).pack(side="left")
+        ctk.CTkEntry(_base_row_frame, textvariable=self._base_bet_var,
+                     height=32, width=120).pack(side="left")
+        ctk.CTkLabel(_base_row_frame, text="Start amount (Martingale / D'Alembert / Fibonacci)",
+                      font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(side="left", padx=(8, 0))
+
+        # Bet percent (only for Fixed %)
+        _pct_row_frame = ctk.CTkFrame(self, fg_color="transparent")
+        ctk.CTkLabel(_pct_row_frame, text="Bet percent %", width=160, anchor="w",
+                      font=T.FONT_BODY, text_color=T.TEXT).pack(side="left")
+        ctk.CTkEntry(_pct_row_frame, textvariable=self._bet_percent_var,
+                     height=32, width=80).pack(side="left")
+        ctk.CTkLabel(_pct_row_frame, text="% of faucet balance per roll",
+                      font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(side="left", padx=(8, 0))
+
+        # Win-chance (hidden for All-In)
+        _chance_row_frame = ctk.CTkFrame(self, fg_color="transparent")
+        ctk.CTkLabel(_chance_row_frame, text="Win chance %", width=160, anchor="w",
+                      font=T.FONT_BODY, text_color=T.TEXT).pack(side="left")
+        ctk.CTkEntry(_chance_row_frame, textvariable=self._strat_chance_var,
+                     height=32, width=80).pack(side="left")
+        ctk.CTkLabel(_chance_row_frame, text="Fixed win probability (e.g. 49.5)",
+                      font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(side="left", padx=(8, 0))
+
+        # Apply initial visibility
+        _on_strategy_change(self._strategy_var.get())
 
         # ── Cashout ───────────────────────────────────────────────
         _section("💰  Cashout")
@@ -313,6 +381,23 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._cfg.set("auto_cashout",          self._auto_co_var.get())
         self._cfg.set("continue_after_cashout", self._continue_var.get())
         self._cfg.set("scheduler_enabled",     self._sched_on_var.get())
+
+        # Strategy
+        from core.strategies import STRATEGY_LABELS as _SL
+        _label_to_name = {v: k for k, v in _SL.items()}
+        self._cfg.set("strategy", _label_to_name.get(self._strategy_var.get(), "all_in"))
+        try:
+            self._cfg.set("strategy_base_bet",    float(self._base_bet_var.get() or "0.001"))
+        except ValueError:
+            pass
+        try:
+            self._cfg.set("strategy_bet_percent", float(self._bet_percent_var.get() or "1.0"))
+        except ValueError:
+            pass
+        try:
+            self._cfg.set("strategy_chance",      float(self._strat_chance_var.get() or "49.5"))
+        except ValueError:
+            pass
         try:
             jitter = max(0, int(self._jitter_var.get() or "5"))
         except ValueError:
