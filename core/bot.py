@@ -23,6 +23,7 @@ from .api import DuckDiceAPI, CookieExpiredError, RateLimitError
 from .config import BotConfig
 from .tictactoe import TicTacToeClaimEngine
 from .strategies import BettingStrategy, make_strategy
+from .browser_session import BrowserSession
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,9 @@ class FaucetBot:
         self._strategy: Optional[BettingStrategy] = None
         self._last_win: Optional[bool] = None
 
+        # Playwright browser session (optional, used when use_browser_session=True)
+        self._browser_session: Optional[BrowserSession] = None
+
         self.stats = {
             "session_start":    None,
             "total_bets":       0,
@@ -102,7 +106,20 @@ class FaucetBot:
         self.target_amount    = float(self._cfg.get("target_amount") or 20.0)
         self.cashout_threshold = float(self._cfg.get("cashout_threshold") or 0) or self.target_amount
 
-        self._api = DuckDiceAPI(api_key=api_key, cookie=cookie)
+        # Start Playwright browser session if configured
+        use_browser = self._cfg.get("use_browser_session", False)
+        if use_browser:
+            self._browser_session = BrowserSession(cookie=cookie)
+            try:
+                self._browser_session.start()
+                self._api = DuckDiceAPI(api_key=api_key, cookie=cookie,
+                                        session=self._browser_session)
+            except Exception as exc:
+                self._log(f"⚠️  Browser session failed to start: {exc} — falling back to requests")
+                self._browser_session = None
+                self._api = DuckDiceAPI(api_key=api_key, cookie=cookie)
+        else:
+            self._api = DuckDiceAPI(api_key=api_key, cookie=cookie)
 
         # Instantiate betting strategy from config
         strategy_name = self._cfg.get("strategy", "all_in")
@@ -112,6 +129,8 @@ class FaucetBot:
         self._log("=" * 60)
         self._log("🎰 FAUCETPLAY STARTED")
         self._log("=" * 60)
+        if use_browser and self._browser_session:
+            self._log("🌐 Browser session: ON (Playwright)")
 
         paw = self._api.get_paw_level(force=True)
         self._log(f"🐾 PAW Level {paw}  |  TTT required: {self._api.ttt_games_needed()}")
@@ -122,7 +141,6 @@ class FaucetBot:
         self._log(f"💰 Auto-cashout: {'ON' if auto_co else 'OFF'}"
                   + (f"  threshold: {self.cashout_threshold}" if auto_co else ""))
 
-        strategy_name = self._cfg.get("strategy", "all_in")
         self._log(f"🎯 Strategy: {strategy_name.replace('_', ' ').title()}")
 
         balance = self._api.get_balance(currency)
@@ -133,6 +151,11 @@ class FaucetBot:
     def stop(self) -> None:
         self.running = False
         self._state = BotState.STOPPED
+        # Persist browser session cookies before stopping
+        if self._browser_session:
+            self._browser_session.save_state()
+            self._browser_session.stop()
+            self._browser_session = None
         self._log("🛑 Bot stopped")
 
     def pause(self) -> None:

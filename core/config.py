@@ -44,6 +44,8 @@ class BotConfig:
             "strategy_base_bet":      0.001,
             "strategy_bet_percent":   1.0,
             "strategy_chance":        49.5,
+            # Browser session (Playwright-backed HTTP client)
+            "use_browser_session":    False,
         }
 
     def _get_cipher(self) -> Fernet:

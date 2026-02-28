@@ -41,6 +41,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._continue_var   = tk.BooleanVar(value=bool(config.get("continue_after_cashout", True)))
         self._sched_on_var   = tk.BooleanVar(value=bool(config.get("scheduler_enabled", False)))
         self._autostart_var  = tk.BooleanVar(value=False)
+        self._browser_session_var = tk.BooleanVar(value=bool(config.get("use_browser_session", False)))
 
         # Strategy vars
         saved_strategy = config.get("strategy", "all_in")
@@ -97,6 +98,39 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             "→ Cookies → copy the full string."
         ), font=T.FONT_SMALL, text_color=T.TEXT_DIM, wraplength=480, justify="left")
         hint.pack(anchor="w", padx=4, pady=(0, 4))
+
+        # Cookie auto-detection buttons
+        cookie_btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        cookie_btn_row.pack(anchor="w", pady=(0, 4))
+
+        self._detect_btn = ctk.CTkButton(
+            cookie_btn_row, text="🔍 Detect from Chrome/Firefox", height=30,
+            fg_color=T.BG3, hover_color=T.BG2, font=T.FONT_SMALL,
+            command=self._detect_cookie,
+        )
+        self._detect_btn.pack(side="left", padx=(0, 6))
+
+        self._capture_btn = ctk.CTkButton(
+            cookie_btn_row, text="🤖 Open Browser & Capture", height=30,
+            fg_color=T.BG3, hover_color=T.BG2, font=T.FONT_SMALL,
+            command=self._capture_cookie,
+        )
+        self._capture_btn.pack(side="left")
+
+        self._cookie_status_lbl = ctk.CTkLabel(
+            self, text="", font=T.FONT_SMALL, text_color=T.TEXT_DIM)
+        self._cookie_status_lbl.pack(anchor="w", padx=4, pady=(0, 4))
+
+        # Browser Session mode
+        bs_row = ctk.CTkFrame(self, fg_color="transparent")
+        bs_row.pack(fill="x", pady=3)
+        ctk.CTkCheckBox(bs_row,
+                         text="🌐  Browser Session mode (Playwright)",
+                         variable=self._browser_session_var,
+                         font=T.FONT_BODY).pack(side="left")
+        ctk.CTkLabel(bs_row,
+                      text="  Routes all API calls through a real browser — harder to detect",
+                      font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(side="left")
 
         self._test_btn = ctk.CTkButton(
             self, text="🔍 Test Connection", height=32,
@@ -334,6 +368,88 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         """Open the in-app feedback dialog (bug or feature)."""
         FeedbackDialog(self, report_type=report_type)
 
+    # ── Cookie auto-detection ────────────────────────────────
+
+    def _detect_cookie(self):
+        """Try to read duckdice.io cookies from an installed Chrome/Firefox."""
+        self._detect_btn.configure(state="disabled", text="Detecting…")
+        threading.Thread(target=self._do_detect_cookie, daemon=True).start()
+
+    def _do_detect_cookie(self):
+        try:
+            from core.cookie_extractor import extract_best
+            cookie, source = extract_best("duckdice.io")
+            if cookie:
+                self.after(0, lambda: self._cookie_var.set(cookie))
+                label = source.replace("_", " ").title()
+                self.after(0, lambda: self._cookie_status_lbl.configure(
+                    text=f"✅  Found in {label}", text_color=T.GREEN))
+                self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
+            else:
+                self.after(0, lambda: self._cookie_status_lbl.configure(
+                    text="No DuckDice session found in Chrome/Firefox.",
+                    text_color=T.YELLOW))
+                self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
+        except Exception as e:
+            err = str(e)
+            self.after(0, lambda: self._cookie_status_lbl.configure(
+                text=f"Detection error: {err}", text_color=T.RED))
+        finally:
+            self.after(0, lambda: self._detect_btn.configure(
+                state="normal", text="🔍 Detect from Chrome/Firefox"))
+
+    def _capture_cookie(self):
+        """Open a Playwright browser window and capture the cookie on login."""
+        self._capture_btn.configure(state="disabled", text="Opening browser…")
+        self._cookie_status_lbl.configure(
+            text="Log in to DuckDice in the browser that opens…", text_color=T.ACCENT2)
+        threading.Thread(target=self._do_capture_cookie, daemon=True).start()
+
+    def _do_capture_cookie(self):
+        import time as _time
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=False)
+                context = browser.new_context()
+                page    = context.new_page()
+                page.goto("https://duckdice.io", wait_until="domcontentloaded",
+                          timeout=15_000)
+                cookie_str = None
+                for _ in range(120):
+                    cookies = context.cookies()
+                    if any(c["name"] == "_session" for c in cookies):
+                        cookie_str = "; ".join(
+                            f"{c['name']}={c['value']}"
+                            for c in cookies
+                            if "duckdice" in c.get("domain", "")
+                        )
+                        # Persist browser state
+                        try:
+                            from core.browser_session import _DEFAULT_STATE
+                            _DEFAULT_STATE.parent.mkdir(parents=True, exist_ok=True)
+                            context.storage_state(path=str(_DEFAULT_STATE))
+                        except Exception:
+                            pass
+                        break
+                    _time.sleep(1)
+                browser.close()
+            if cookie_str:
+                self.after(0, lambda: self._cookie_var.set(cookie_str))
+                self.after(0, lambda: self._cookie_status_lbl.configure(
+                    text="✅  Cookie captured & session saved!", text_color=T.GREEN))
+                self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
+            else:
+                self.after(0, lambda: self._cookie_status_lbl.configure(
+                    text="Timed out — log in within 2 minutes.", text_color=T.YELLOW))
+        except Exception as e:
+            err = str(e)
+            self.after(0, lambda: self._cookie_status_lbl.configure(
+                text=f"Browser error: {err}", text_color=T.RED))
+        finally:
+            self.after(0, lambda: self._capture_btn.configure(
+                state="normal", text="🤖 Open Browser & Capture"))
+
     # ── Test connection ────────────────────────────────────────
 
     def _test_connection(self):
@@ -381,6 +497,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._cfg.set("auto_cashout",          self._auto_co_var.get())
         self._cfg.set("continue_after_cashout", self._continue_var.get())
         self._cfg.set("scheduler_enabled",     self._sched_on_var.get())
+        self._cfg.set("use_browser_session",   self._browser_session_var.get())
 
         # Strategy
         from core.strategies import STRATEGY_LABELS as _SL

@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.3.0"
+APP_VERSION = "1.4.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,18 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.4.0 — Automatic cookie extraction & Playwright browser session
+  • 🔍 "Detect from Chrome/Firefox" — reads duckdice.io cookies from your
+    installed browser (no login required if already logged in)
+  • 🤖 Auto-Extract now saves the full Playwright browser_state.json so the
+    session is reused on future runs — no re-login needed
+  • 🌐 Browser Session mode — routes ALL API calls through Playwright's
+    APIRequestContext (identical TLS fingerprint + cookie handling as real browser)
+  • core/browser_session.py — persistent Playwright session, drop-in for requests
+  • core/cookie_extractor.py — Chrome/Firefox SQLite + browser_cookie3 support
+  • Settings panel: two new cookie buttons + Browser Session toggle
+  • Optional: pip install browser-cookie3 for OS-keychain cookie decryption
+
 v1.3.0 — Multiple betting strategies
   • 6 betting modes: All-In, Martingale, Reverse Martingale, Fixed %, D'Alembert, Fibonacci
   • Strategy selector in Settings → Betting Mode with context-sensitive fields

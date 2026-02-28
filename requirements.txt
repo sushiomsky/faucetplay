@@ -1,7 +1,7 @@
 # HTTP
 requests>=2.31.0
 
-# Headless browser (Tic-Tac-Toe engine for PAW 0-3)
+# Headless browser (Tic-Tac-Toe engine for PAW 0-3, BrowserSession, cookie capture)
 playwright>=1.44.0
 
 # Encryption (config storage)
@@ -15,3 +15,8 @@ schedule>=1.2.0
 
 # Build
 PyInstaller>=6.0.0
+
+# Optional: auto-extract cookies from Chrome/Firefox without opening a browser
+# Handles OS-level cookie encryption (macOS Keychain, Windows DPAPI).
+# Install with: pip install browser-cookie3
+# browser-cookie3>=0.19.0

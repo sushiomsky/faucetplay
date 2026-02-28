@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import threading
 import tkinter as tk
+import webbrowser
 from typing import Callable, Optional
 
 import customtkinter as ctk
@@ -13,6 +14,9 @@ import customtkinter as ctk
 from . import theme as T
 from core.api import DuckDiceAPI, CookieExpiredError
 from core.config import BotConfig
+
+_DUCKDICE_URL         = "https://duckdice.io"
+_DUCKDICE_PROFILE_URL = "https://duckdice.io/profile"
 
 
 STEPS = [
@@ -33,7 +37,7 @@ class OnboardingWizard(ctk.CTkToplevel):
                  on_complete: Callable[[], None]):
         super().__init__(parent)
         self.title("FaucetPlay — Setup")
-        self.geometry("540x580")
+        self.geometry("540x640")
         self.resizable(False, False)
         self.configure(fg_color=T.BG)
         self.grab_set()
@@ -129,24 +133,185 @@ class OnboardingWizard(ctk.CTkToplevel):
     # ── Steps ──────────────────────────────────────────────────────
 
     def _step_apikey(self):
-        _heading(self._content, "Enter your DuckDice API Key")
-        _hint(self._content,
-              "DuckDice.io → Settings → API → Generate Key\n"
-              "Your key is stored encrypted on your machine only.")
+        _heading(self._content, "API Key  (Optional)")
+
+        steps_frame = ctk.CTkFrame(self._content, fg_color=T.BG3, corner_radius=6)
+        steps_frame.pack(fill="x", pady=(0, 10))
+        for i, txt in enumerate([
+            "Click  Open API Settings  below",
+            "Navigate to  Settings → API  tab",
+            "Click  Generate Key  (or copy your existing key)",
+            "Paste it in the field below",
+        ], start=1):
+            row = ctk.CTkFrame(steps_frame, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=(4 if i == 1 else 1, 1 if i < 4 else 4))
+            ctk.CTkLabel(row, text=f"{i}.", width=22, font=T.FONT_BODY,
+                         text_color=T.ACCENT2, anchor="e").pack(side="left")
+            ctk.CTkLabel(row, text=txt, font=T.FONT_BODY,
+                         text_color=T.TEXT, anchor="w").pack(side="left", padx=(6, 0))
+        ctk.CTkButton(
+            steps_frame, text="🌐  Open API Settings", height=30,
+            fg_color=T.BG2, hover_color=T.BG, font=T.FONT_SMALL,
+            command=lambda: webbrowser.open(_DUCKDICE_PROFILE_URL),
+        ).pack(padx=10, pady=(2, 10), anchor="w")
+
         _entry(self._content, "API Key", var=self._api_key_var, show="•")
         _hint(self._content,
-              "💡 The API key lets FaucetPlay claim your faucet and place bets "
-              "on your behalf — it cannot withdraw funds.")
+              "💡 FaucetPlay bets using your session cookie — the same way the "
+              "DuckDice website does. The API key is only needed as a fallback "
+              "if cookie auth is rejected for betting or cashout. You can skip "
+              "this step and add it later in Settings if needed.")
 
     def _step_cookie(self):
         _heading(self._content, "Enter your Session Cookie")
-        _hint(self._content,
-              "Open DuckDice in Chrome/Firefox → press F12 → Application tab\n"
-              "→ Cookies → duckdice.io → copy the full cookie string.")
+
+        # ── Auto-extract (easiest path) ────────────────────────────
+        auto_frame = ctk.CTkFrame(self._content, fg_color=T.BG3, corner_radius=6)
+        auto_frame.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(auto_frame, text="✨  Easiest: Auto-Extract",
+                     font=T.FONT_H3, text_color=T.GREEN).pack(anchor="w", padx=10, pady=(8, 2))
+        ctk.CTkLabel(auto_frame,
+                     text="FaucetPlay opens a browser window. Log in to DuckDice "
+                          "and the cookie is captured automatically — no DevTools needed.",
+                     font=T.FONT_SMALL, text_color=T.TEXT_DIM,
+                     wraplength=470, justify="left").pack(anchor="w", padx=10)
+
+        btn_row = ctk.CTkFrame(auto_frame, fg_color="transparent")
+        btn_row.pack(fill="x", padx=10, pady=(6, 10))
+        self._auto_btn = ctk.CTkButton(
+            btn_row, text="🤖  Auto-Extract Cookie", height=32,
+            fg_color=T.GREEN, hover_color="#1e8449", font=T.FONT_BODY,
+            command=self._auto_extract_cookie,
+        )
+        self._auto_btn.pack(side="left")
+
+        # "Already logged in?" — read cookies from installed Chrome/Firefox
+        self._detect_btn = ctk.CTkButton(
+            btn_row, text="🔍  Detect from Chrome/Firefox", height=32,
+            fg_color=T.BG2, hover_color=T.BG, font=T.FONT_SMALL,
+            command=self._detect_installed_browser,
+        )
+        self._detect_btn.pack(side="left", padx=(8, 0))
+
+        # ── Divider ────────────────────────────────────────────────
+        ctk.CTkLabel(self._content, text="─── or paste manually ───",
+                     font=T.FONT_SMALL, text_color=T.TEXT_DIM).pack(pady=(0, 4))
+
+        # ── Manual steps ───────────────────────────────────────────
+        steps_frame = ctk.CTkFrame(self._content, fg_color=T.BG3, corner_radius=6)
+        steps_frame.pack(fill="x", pady=(0, 8))
+        for i, txt in enumerate([
+            "Open DuckDice in Chrome or Firefox",
+            "Press  F12  →  Application  tab  →  Cookies  →  duckdice.io",
+            "Find the  _session  row — copy its  Value",
+            "Paste it in the field below",
+        ], start=1):
+            row = ctk.CTkFrame(steps_frame, fg_color="transparent")
+            row.pack(fill="x", padx=10, pady=(4 if i == 1 else 1, 1 if i < 4 else 4))
+            ctk.CTkLabel(row, text=f"{i}.", width=22, font=T.FONT_BODY,
+                         text_color=T.ACCENT2, anchor="e").pack(side="left")
+            ctk.CTkLabel(row, text=txt, font=T.FONT_BODY,
+                         text_color=T.TEXT, anchor="w").pack(side="left", padx=(6, 0))
+
         _entry(self._content, "Cookie string", var=self._cookie_var, show="•")
         _hint(self._content,
               "⚠️  Never share your cookie. It grants access to your account.\n"
               "FaucetPlay stores it encrypted locally and never transmits it.")
+
+    def _auto_extract_cookie(self):
+        if getattr(self, "_extracting", False):
+            return
+        self._extracting = True
+        threading.Thread(target=self._do_auto_extract_cookie, daemon=True).start()
+
+    def _do_auto_extract_cookie(self):
+        import time as _time
+        self.after(0, lambda: self._auto_btn.configure(
+            state="disabled", text="Opening browser…"))
+        self.after(0, lambda: self._status(
+            "🌐  Log in to DuckDice in the browser that just opened…", T.ACCENT2))
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            self.after(0, lambda: self._status(
+                "Playwright not installed. Run:  playwright install chromium", T.RED))
+            self._extracting = False
+            self.after(0, lambda: self._auto_btn.configure(
+                state="normal", text="🤖  Auto-Extract Cookie"))
+            return
+        try:
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=False)
+                context = browser.new_context()
+                page = context.new_page()
+                page.goto(_DUCKDICE_URL, wait_until="domcontentloaded", timeout=15_000)
+
+                cookie_str = None
+                for _ in range(120):   # wait up to 2 minutes for login
+                    cookies = context.cookies()
+                    if any(c["name"] == "_session" for c in cookies):
+                        cookie_str = "; ".join(
+                            f"{c['name']}={c['value']}"
+                            for c in cookies
+                            if "duckdice" in c.get("domain", "")
+                        )
+                        break
+                    _time.sleep(1)
+
+                # Save full browser state for BrowserSession reuse
+                if cookie_str:
+                    try:
+                        from core.browser_session import _DEFAULT_STATE
+                        _DEFAULT_STATE.parent.mkdir(parents=True, exist_ok=True)
+                        context.storage_state(path=str(_DEFAULT_STATE))
+                    except Exception:
+                        pass
+
+                browser.close()
+
+            if cookie_str:
+                self.after(0, lambda: self._cookie_var.set(cookie_str))
+                self.after(0, lambda: self._status(
+                    "✅  Cookie extracted & session saved! Click Next to continue.", T.GREEN))
+            else:
+                self.after(0, lambda: self._status(
+                    "Timed out — log in within 2 minutes and try again.", T.YELLOW))
+        except Exception as e:
+            err = str(e)
+            self.after(0, lambda: self._status(f"Browser error: {err}", T.RED))
+        finally:
+            self._extracting = False
+            self.after(0, lambda: self._auto_btn.configure(
+                state="normal", text="🤖  Auto-Extract Cookie"))
+
+    def _detect_installed_browser(self):
+        """Try to read duckdice.io cookies from Chrome/Firefox already on this machine."""
+        if getattr(self, "_detecting", False):
+            return
+        self._detecting = True
+        self._detect_btn.configure(state="disabled", text="Detecting…")
+        threading.Thread(target=self._do_detect_installed_browser, daemon=True).start()
+
+    def _do_detect_installed_browser(self):
+        try:
+            from core.cookie_extractor import extract_best
+            cookie, source = extract_best("duckdice.io")
+            if cookie:
+                self.after(0, lambda: self._cookie_var.set(cookie))
+                label = source.replace("_", " ").title()
+                self.after(0, lambda: self._status(
+                    f"✅  Cookie found in {label}! Click Next to continue.", T.GREEN))
+            else:
+                self.after(0, lambda: self._status(
+                    "No DuckDice cookies found in Chrome or Firefox. "
+                    "Use Auto-Extract to log in.", T.YELLOW))
+        except Exception as e:
+            err = str(e)
+            self.after(0, lambda: self._status(f"Detection failed: {err}", T.RED))
+        finally:
+            self._detecting = False
+            self.after(0, lambda: self._detect_btn.configure(
+                state="normal", text="🔍  Detect from Chrome/Firefox"))
 
     def _step_paw(self):
         _heading(self._content, "Detecting your PAW Level…")
@@ -284,8 +449,6 @@ class OnboardingWizard(ctk.CTkToplevel):
             self._show_step(self._step + 1)
 
     def _validate(self) -> bool:
-        if self._step == 0 and not self._api_key_var.get().strip():
-            self._status("API Key is required.", T.RED); return False
         if self._step == 1 and not self._cookie_var.get().strip():
             self._status("Cookie is required.", T.RED); return False
         if self._step == 4:

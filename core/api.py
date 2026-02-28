@@ -1,6 +1,7 @@
 """
 FaucetPlay — DuckDice API Wrapper
 Features:
+  - Cookie-first auth: all endpoints try session-cookie before api_key fallback
   - Retry with exponential back-off on transient errors and 429 rate-limits
   - Cookie expiry detection (raises CookieExpiredError)
   - Dynamic per-currency minimum-bet fetch
@@ -65,10 +66,22 @@ class DuckDiceAPI:
     RATE_LIMIT_RETRIES = 6
     RATE_LIMIT_BASE_WAIT = 5  # seconds
 
-    def __init__(self, api_key: str, cookie: str = ""):
+    def __init__(self, api_key: str = "", cookie: str = "", session=None):
+        """
+        Parameters
+        ----------
+        api_key  : DuckDice bot API key (optional — used as fallback auth)
+        cookie   : Raw session cookie string (used when session=None)
+        session  : Optional BrowserSession (from core.browser_session).
+                   When provided, all HTTP calls go through Playwright's
+                   APIRequestContext — cookie handling is automatic and
+                   the session looks identical to a real browser.
+        """
         self.api_key = api_key
         self.cookie  = cookie
-        self._session = _build_session()
+        # Use the provided BrowserSession or fall back to requests.Session
+        self._session = session if session is not None else _build_session()
+        self._using_browser_session = session is not None
 
         # Caches
         self._paw_level: Optional[int] = None
@@ -95,6 +108,60 @@ class DuckDiceAPI:
 
     def _post(self, url: str, **kwargs) -> requests.Response:
         return self._request("POST", url, **kwargs)
+
+    def _authed(self, method: str, path: str, **kwargs) -> requests.Response:
+        """
+        Cookie-first authenticated request.
+
+        When a BrowserSession is active, cookies are handled automatically by
+        Playwright's cookie store — no manual Cookie header injection needed.
+
+        Otherwise falls back to the manual cookie header → api_key chain.
+        """
+        base_url = f"{self.BASE_URL}{path}"
+
+        if self._using_browser_session:
+            # Playwright manages cookies; just fire the request.
+            try:
+                resp = self._request(method, base_url, **kwargs)
+                if resp.status_code not in (401, 403):
+                    return resp
+                logger.info("Browser session auth rejected (HTTP %s) for %s",
+                            resp.status_code, path)
+            except CookieExpiredError:
+                if not self.api_key:
+                    raise
+                logger.info("Browser session expired for %s — trying api_key", path)
+            # Fall through to api_key if browser session auth failed
+            if self.api_key:
+                sep = "&" if "?" in path else "?"
+                return self._request(method, f"{base_url}{sep}api_key={self.api_key}",
+                                     **kwargs)
+            return self._request(method, base_url, **kwargs)
+
+        # ── requests.Session path: inject Cookie header manually ──────
+        if self.cookie:
+            cookie_kw = {**kwargs,
+                         "headers": {**self._browser_headers(),
+                                     **kwargs.get("headers", {})}}
+            try:
+                resp = self._request(method, base_url, **cookie_kw)
+                if resp.status_code not in (401, 403):
+                    return resp
+                logger.info("Cookie auth rejected (HTTP %s) for %s — trying api_key",
+                            resp.status_code, path)
+            except CookieExpiredError:
+                if not self.api_key:
+                    raise
+                logger.info("Cookie expired for %s — falling back to api_key", path)
+
+        if self.api_key:
+            sep = "&" if "?" in path else "?"
+            return self._request(method,
+                                 f"{base_url}{sep}api_key={self.api_key}", **kwargs)
+
+        # No credentials available — bare request (will surface the auth error)
+        return self._request(method, base_url, **kwargs)
 
     def _request(self, method: str, url: str, **kwargs) -> requests.Response:
         """
@@ -133,8 +200,7 @@ class DuckDiceAPI:
         now = time.time()
         if not force and self._user_info_cache and (now - self._user_info_ts) < 60:
             return self._user_info_cache
-        url = f"{self.BASE_URL}/api/bot/user-info?api_key={self.api_key}"
-        resp = self._get(url)
+        resp = self._authed("GET", "/api/bot/user-info")
         if resp.status_code != 200:
             logger.error("user-info HTTP %s", resp.status_code)
             return self._user_info_cache or {}
@@ -208,8 +274,7 @@ class DuckDiceAPI:
         }
 
         try:
-            url = f"{self.BASE_URL}/bot-api/info?api_key={self.api_key}&symbol={cur}"
-            resp = self._get(url)
+            resp = self._authed("GET", f"/bot-api/info?symbol={cur}")
             if resp.status_code == 200:
                 data = resp.json()
                 min_bet = (
@@ -260,7 +325,6 @@ class DuckDiceAPI:
         use_faucet: bool = True,
     ) -> Optional[Dict]:
         """Place a dice bet. Returns full API response dict or None on failure."""
-        url = f"{self.BASE_URL}/api/dice/play?api_key={self.api_key}"
         payload = {
             "symbol":  currency.upper(),
             "amount":  f"{amount:.9f}",
@@ -268,7 +332,7 @@ class DuckDiceAPI:
             "isHigh":  is_high,
             "faucet":  use_faucet,
         }
-        resp = self._post(url, json=payload)
+        resp = self._authed("POST", "/api/dice/play", json=payload)
         if resp.status_code != 200:
             logger.error("play_dice HTTP %s: %s", resp.status_code, resp.text[:300])
             return None
@@ -292,17 +356,15 @@ class DuckDiceAPI:
 
         Raises CookieExpiredError if the session is dead.
         """
-        url = f"{self.BASE_URL}/api/bot/transfer?api_key={self.api_key}"
         payload = {
             "symbol": currency.upper(),
             "amount": f"{amount:.9f}",
         }
-        resp = self._post(url, json=payload)
+        resp = self._authed("POST", "/api/bot/transfer", json=payload)
 
         # DuckDice may also expose this under /api/faucet/transfer — try both
         if resp.status_code == 404:
-            url2 = f"{self.BASE_URL}/api/faucet/transfer?api_key={self.api_key}"
-            resp = self._post(url2, json=payload)
+            resp = self._authed("POST", "/api/faucet/transfer", json=payload)
 
         if resp.status_code == 200:
             data = resp.json()
@@ -353,10 +415,10 @@ class DuckDiceAPI:
         Probes the API with a zero-amount dry-run if supported, otherwise
         returns 0 (optimistic — the real cashout call will return cooldown info).
         """
-        url = f"{self.BASE_URL}/api/bot/transfer?api_key={self.api_key}"
         try:
-            resp = self._post(url, json={"symbol": currency.upper(),
-                                         "amount": "0", "dry_run": True})
+            resp = self._authed("POST", "/api/bot/transfer",
+                                json={"symbol": currency.upper(),
+                                      "amount": "0", "dry_run": True})
             if resp.status_code == 429:
                 body = resp.json()
                 return int(body.get("retry_after") or body.get("cooldown") or 0)
