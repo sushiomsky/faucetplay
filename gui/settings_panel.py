@@ -57,7 +57,21 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._time_vars = [tk.StringVar(value=t) for t in saved_times[:3]]
         self._jitter_var = tk.StringVar(value=str(config.get("jitter_minutes", "5")))
 
+        self._dirty = False
+        self._save_btn: Optional["ctk.CTkButton"] = None
+
         self._build()
+
+        # Watch all vars for unsaved changes
+        _watched = (
+            self._api_key_var, self._cookie_var, self._currency_var, self._target_var,
+            self._edge_var, self._base_bet_var, self._bet_percent_var,
+            self._strat_chance_var, self._jitter_var, self._strategy_var,
+            self._auto_co_var, self._continue_var, self._sched_on_var,
+            self._browser_session_var, *self._time_vars,
+        )
+        for _v in _watched:
+            _v.trace_add("write", self._mark_dirty)
 
     def _build(self):
         def _section(text: str):
@@ -291,9 +305,10 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._status_lbl = ctk.CTkLabel(self, text="", font=T.FONT_SMALL,
                                          text_color=T.TEXT_DIM)
         self._status_lbl.pack(pady=(0, 4))
-        ctk.CTkButton(self, text="💾  Save Settings", height=38,
+        self._save_btn = ctk.CTkButton(self, text="💾  Save Settings", height=38,
                        fg_color=T.ACCENT, hover_color=T.ACCENT2,
-                       font=T.FONT_BODY, command=self._save).pack(pady=4)
+                       font=T.FONT_BODY, command=self._save)
+        self._save_btn.pack(pady=4)
 
         # ── About & Updates ───────────────────────────────────────
         _section("ℹ️  About & Updates")
@@ -537,5 +552,14 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         self._status_lbl.configure(text="✅  Settings saved.", text_color=T.GREEN)
         self.after(3000, lambda: self._status_lbl.configure(text=""))
+        self._dirty = False
+        if self._save_btn:
+            self._save_btn.configure(text="💾  Save Settings")
         if self._on_save:
             self._on_save()
+
+    def _mark_dirty(self, *_) -> None:
+        if not self._dirty:
+            self._dirty = True
+            if self._save_btn:
+                self._save_btn.configure(text="💾  Save Settings ●")

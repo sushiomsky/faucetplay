@@ -321,6 +321,7 @@ class MainWindow(ctk.CTk):
             api=self._chat_api,
             config=config,
             db=self._chat_db,
+            log_callback=lambda msg: self._log_queue.put(msg),
         )
         self._prev_wins: int   = 0
         self._prev_cash: float = 0.0
