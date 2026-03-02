@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.4.0"
+APP_VERSION = "1.5.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,18 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.5.0 — Auto-Chat & UX Overhaul
+  • 💬 Auto-Chat engine — sends random messages to DuckDice chat on a schedule
+  • 📦 100 default messages seeded in a local SQLite database (~/.faucetplay_bot/chat_messages.db)
+  • 🔇 Dry-run mode ON by default — nothing sent until you explicitly enable live mode
+  • ⏱  Configurable interval (min/max seconds) with random jitter between sends
+  • 🌙 Rest periods — define overnight or any HH:MM windows where chat is silenced
+  • ⚡ Send Now button — forces an immediate message without waiting for the next interval
+  • 📝 Message manager — search/filter, count badge, Enable All / Disable All, per-row toggle & delete, Enter-to-add
+  • 📡 Activity mini-log — last 30 sent/dry-run entries shown live in the Auto-Chat tab
+  • 🟡 Unsaved-changes indicator — Save buttons show ● dot when settings have been modified
+  • Two-pane chat layout: sticky settings sidebar + scrollable message manager
+
 v1.4.0 — Automatic cookie extraction & Playwright browser session
   • 🔍 "Detect from Chrome/Firefox" — reads duckdice.io cookies from your
     installed browser (no login required if already logged in)
@@ -60,11 +72,6 @@ v1.1.0 — Reliability & code quality
   • Main Balance card now shows live balance after cashout
   • Bet guard: redirects to claim if balance falls below min_bet
   • assert → BotError raise (safe under python -O)
-  • Config: proper logging + InvalidToken warning on decrypt fail
-  • Scheduler: negative jitter now logs correctly instead of silently dropping
-  • Settings: jitter field validates input, no more int() crash on bad value
-  • Remove stale withdraw() stub and inline import time alias
-  • Removed obsolete files from repo (scheduler_panel, faucetplay.py, etc.)
 
 v1.0.0 — Initial release
   • Single-account faucet farming with PAW-aware claiming

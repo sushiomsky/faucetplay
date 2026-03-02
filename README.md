@@ -19,7 +19,7 @@ FaucetPlay claims your DuckDice faucets, plays the required Tic-Tac-Toe games au
 
 ---
 
-## ✨ Current Features (v1.4.0)
+## ✨ Current Features (v1.5.0)
 
 ### 🤖 Faucet Automation
 | Feature | Details |
@@ -75,7 +75,19 @@ All strategies respect per-round stop-loss and reset cleanly after each cashout.
 | **Toast notifications** | Non-intrusive win, target, and error toasts |
 | **In-app feedback** | Report bugs or request features directly to GitHub Issues — no account needed |
 | **Auto-update banner** | Checks GitHub releases on startup; shows a download link when a newer version exists |
+| **Unsaved-changes indicator** | Save buttons show `●` whenever there are pending unsaved changes |
 | **Dark UI** | Polished CustomTkinter interface — dark mode only, as it should be |
+
+### 💬 Auto-Chat
+| Feature | Details |
+|---|---|
+| **Randomised chat messages** | Picks from a local SQLite message database and posts at a configurable random interval |
+| **100 default messages** | Seeded on first run — ready to use out of the box |
+| **Dry-run mode (default ON)** | Messages are only logged locally until you explicitly enable Live mode |
+| **Rest periods** | Silence chat during overnight windows or any HH:MM range (supports overnight wrap-around) |
+| **Message manager** | Add/remove messages, per-message enable toggle, live search, bulk Enable/Disable All |
+| **Activity mini-log** | Last 30 sent/dry-run entries shown live with timestamps in the Auto-Chat tab |
+| **⚡ Send Now** | Force an immediate message without waiting for the next interval |
 
 ---
 
@@ -183,8 +195,8 @@ The `release` job then creates a GitHub Release and attaches all four artifacts 
 To trigger a release:
 
 ```bash
-git tag v1.4.0
-git push origin v1.4.0
+git tag v1.5.0
+git push origin v1.5.0
 ```
 
 > The `FEEDBACK_TOKEN` placeholder in `core/version.py` is substituted with the `FEEDBACK_TOKEN` repository secret at build time to enable in-app GitHub Issue submission.
@@ -303,6 +315,17 @@ Settings → About → **🐛 Report Bug** or **💡 Feature Request**. This pos
 ---
 
 ## 📋 Changelog
+
+### v1.5.0 — Auto-Chat & UX Overhaul
+- 💬 **Auto-Chat engine** — sends random messages to DuckDice chat on a randomised schedule
+- 📦 100 default messages seeded in a local SQLite database (`~/.faucetplay_bot/chat_messages.db`)
+- 🔇 **Dry-run ON by default** — nothing is sent until you flip the switch to Live mode
+- ⏱  **Configurable interval** (min/max seconds) with random jitter between messages
+- 🌙 **Rest periods** — silence chat during overnight or any HH:MM windows
+- ⚡ **Send Now** — force an immediate message without waiting for the next interval
+- 📝 **Message manager** — live search/filter, count badge, Enable/Disable All, per-row toggle & delete, Enter-to-add
+- 📡 **Activity mini-log** — last 30 sent/dry-run entries shown live in the Auto-Chat tab
+- 🟡 **Unsaved-changes indicator** — Save buttons show `●` when there are pending changes
 
 ### v1.4.0 — Automatic Cookie Extraction & Playwright Browser Session
 - 🔍 **Detect from Chrome/Firefox** — reads `duckdice.io` cookies from your installed browser (no login required if already signed in)
