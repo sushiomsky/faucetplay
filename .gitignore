@@ -42,6 +42,13 @@ Thumbs.db
 bot_state.json
 strategy_config.json
 
+# Encryption key (Fernet key — must never be committed)
+*.key
+.key
+
+# Playwright browser session (contains auth cookies)
+browser_state.json
+
 # Logs
 *.log
 

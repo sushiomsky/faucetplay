@@ -92,6 +92,15 @@ jobs:
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
 
+      - name: Verify no credentials in bundle
+        run: |
+          $forbidden = @("config.json", "browser_state.json", ".key", "api_key.txt")
+          foreach ($f in $forbidden) {
+            $found = Get-ChildItem -Recurse -Filter $f dist\ 2>$null
+            if ($found) { Write-Error "SECURITY: $f found in bundle!"; exit 1 }
+          }
+          Write-Host "Security check passed — no credential files in bundle."
+
       - name: Package
         run: |
           Compress-Archive -Path dist\FaucetPlay\* -DestinationPath FaucetPlay-Windows.zip
@@ -143,6 +152,14 @@ jobs:
 
       - name: Build Intel binary with PyInstaller
         run: arch -x86_64 $PY -m PyInstaller faucetplay.spec
+
+      - name: Verify no credentials in bundle
+        run: |
+          for f in config.json browser_state.json .key api_key.txt; do
+            found=$(find dist/ -name "$f" 2>/dev/null)
+            if [ -n "$found" ]; then echo "SECURITY: $f found in bundle!"; exit 1; fi
+          done
+          echo "Security check passed — no credential files in bundle."
 
       - name: Verify binary architecture
         run: file dist/FaucetPlay/FaucetPlay | grep -i x86_64
@@ -199,6 +216,14 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
+
+      - name: Verify no credentials in bundle
+        run: |
+          for f in config.json browser_state.json .key api_key.txt; do
+            found=$(find dist/ -name "$f" 2>/dev/null)
+            if [ -n "$found" ]; then echo "SECURITY: $f found in bundle!"; exit 1; fi
+          done
+          echo "Security check passed — no credential files in bundle."
 
       - name: Create DMG
         run: |
@@ -260,6 +285,14 @@ jobs:
 
       - name: Build with PyInstaller
         run: pyinstaller faucetplay.spec
+
+      - name: Verify no credentials in bundle
+        run: |
+          for f in config.json browser_state.json .key api_key.txt; do
+            found=$(find dist/ -name "$f" 2>/dev/null)
+            if [ -n "$found" ]; then echo "SECURITY: $f found in bundle!"; exit 1; fi
+          done
+          echo "Security check passed — no credential files in bundle."
 
       - name: Create launcher script
         run: |
