@@ -46,6 +46,12 @@ class BotConfig:
             "strategy_chance":        49.5,
             # Browser session (Playwright-backed HTTP client)
             "use_browser_session":    False,
+            # Auto-chat
+            "chat_enabled":           False,
+            "chat_dry_run":           True,
+            "chat_interval_min":      120,
+            "chat_interval_max":      600,
+            "chat_rest_periods":      [],
         }
 
     def _get_cipher(self) -> Fernet:

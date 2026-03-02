@@ -408,6 +408,27 @@ class DuckDiceAPI:
         return {"success": False, "amount": 0.0, "cooldown": 0,
                 "message": f"Cashout failed (HTTP {resp.status_code})"}
 
+    # --- Chat ---------------------------------------------------------
+
+    def send_chat_message(self, text: str) -> bool:
+        """
+        Post a message to the DuckDice public chat.
+        Returns True on success, False on failure.
+        """
+        text = text.strip()
+        if not text:
+            return False
+        try:
+            resp = self._authed("POST", "/api/chat", json={"message": text})
+            if resp.status_code in (200, 201):
+                return True
+            logger.warning("send_chat_message HTTP %s: %s",
+                           resp.status_code, resp.text[:200])
+            return False
+        except Exception as exc:
+            logger.warning("send_chat_message error: %s", exc)
+            return False
+
     def get_cashout_cooldown(self, currency: str) -> int:
         """
         Check how many seconds remain before the next cashout is allowed.

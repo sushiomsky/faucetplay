@@ -13,9 +13,13 @@ import customtkinter as ctk
 
 from . import theme as T
 from .settings_panel import SettingsPanel
+from .chat_panel import ChatPanel
 from .toast import ToastManager
 from .wizard import OnboardingWizard
+from core.api import DuckDiceAPI
 from core.bot import FaucetBot, BotError
+from core.chat_bot import ChatBot
+from core.chat_db import ChatMessageDB
 from core.config import BotConfig
 from core.scheduler import BotScheduler
 from core.version import APP_NAME, APP_VERSION, TAGLINE
@@ -306,6 +310,18 @@ class MainWindow(ctk.CTk):
         self._start_time: Optional[datetime] = None
         self._pulse_state = True
         # Tracked across poll cycles so we can detect changes and fire toasts
+
+        # Auto-chat
+        self._chat_db  = ChatMessageDB()
+        self._chat_api = DuckDiceAPI(
+            api_key=config.get("api_key", ""),
+            cookie=config.get("cookie", ""),
+        )
+        self._chat_bot = ChatBot(
+            api=self._chat_api,
+            config=config,
+            db=self._chat_db,
+        )
         self._prev_wins: int   = 0
         self._prev_cash: float = 0.0
 
@@ -320,6 +336,13 @@ class MainWindow(ctk.CTk):
         self._pulse_dot()
         self._check_first_run()
         self.after(3000, self._check_updates)
+
+        # Auto-start chat bot if enabled in config
+        if self._cfg.get("chat_enabled", False):
+            self._chat_bot.start()
+
+        # Stop chat bot when the window closes
+        self.protocol("WM_DELETE_WINDOW", self._on_close)
 
     # ── Layout ─────────────────────────────────────────────────────
 
@@ -358,11 +381,12 @@ class MainWindow(ctk.CTk):
             segmented_button_selected_hover_color=T.ACCENT2,
         )
         self._tabs.pack(fill="both", expand=True, padx=10, pady=(4, 10))
-        for tab in ("Dashboard", "Settings"):
+        for tab in ("Dashboard", "Settings", "Auto-Chat"):
             self._tabs.add(tab)
 
         self._build_dashboard()
         self._build_settings()
+        self._build_chat()
         self._bind_shortcuts()
 
     def _build_dashboard(self):
@@ -500,6 +524,30 @@ class MainWindow(ctk.CTk):
             on_save=self._on_settings_saved,
         )
         self._settings_panel.grid(row=0, column=0, sticky="nsew")
+
+    def _build_chat(self):
+        tab = self._tabs.tab("Auto-Chat")
+        tab.grid_columnconfigure(0, weight=1)
+        tab.grid_rowconfigure(0, weight=1)
+        self._chat_panel = ChatPanel(
+            tab,
+            config=self._cfg,
+            db=self._chat_db,
+            chat_bot=self._chat_bot,
+            on_save=self._on_chat_settings_saved,
+        )
+        self._chat_panel.grid(row=0, column=0, sticky="nsew")
+
+    def _on_chat_settings_saved(self):
+        # Restart chat bot so new settings (especially enable toggle) take effect
+        if self._chat_bot.is_running():
+            self._chat_bot.stop()
+        if self._cfg.get("chat_enabled", False):
+            # Refresh credentials in case they changed
+            self._chat_api.api_key = self._cfg.get("api_key", "")
+            self._chat_api.cookie  = self._cfg.get("cookie", "")
+            self._chat_bot.start()
+        self.toasts.show("Chat settings saved ✅", "success", 2500)
 
     # ── Keyboard shortcuts ─────────────────────────────────────────
 
@@ -659,6 +707,14 @@ class MainWindow(ctk.CTk):
             self._bot.stop()
         self._set_controls_state(False, False)
         self.after(800, self._show_hero)
+
+    def _on_close(self):
+        """Clean shutdown: stop chat bot before destroying the window."""
+        if self._chat_bot.is_running():
+            self._chat_bot.stop()
+        if self._bot and self._bot.running:
+            self._bot.stop()
+        self.destroy()
 
     def _manual_cashout(self):
         if self._bot:

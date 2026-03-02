@@ -15,6 +15,8 @@ from .strategies import (
     DAlembert, FibonacciStrategy,
     STRATEGIES, STRATEGY_LABELS, STRATEGY_NAMES, make_strategy,
 )
+from .chat_db import ChatMessageDB
+from .chat_bot import ChatBot
 
 __all__ = [
     'DuckDiceAPI', 'CookieExpiredError', 'RateLimitError',
@@ -30,4 +32,5 @@ __all__ = [
     'ReverseMartingaleStrategy', 'FixedPercentageStrategy',
     'DAlembert', 'FibonacciStrategy',
     'STRATEGIES', 'STRATEGY_LABELS', 'STRATEGY_NAMES', 'make_strategy',
+    'ChatMessageDB', 'ChatBot',
 ]
