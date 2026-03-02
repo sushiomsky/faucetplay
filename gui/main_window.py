@@ -205,9 +205,19 @@ class UpdateBanner(ctk.CTkFrame):
         btn_frame = ctk.CTkFrame(self, fg_color="transparent")
         btn_frame.pack(side="right", padx=8, pady=6)
 
+        # Download button — only shown when a platform asset exists
+        asset = UpdateChecker.best_asset(info.assets)
+        if asset:
+            ctk.CTkButton(
+                btn_frame, text="⬇  Download", width=110, height=28,
+                fg_color=T.GOLD, hover_color=T.ACCENT2, text_color=T.BG,
+                font=T.FONT_SMALL,
+                command=lambda: self._start_download(asset),
+            ).pack(side="left", padx=4)
+
         ctk.CTkButton(
             btn_frame, text="View Release", width=100, height=28,
-            fg_color=T.GOLD, hover_color=T.ACCENT2, text_color=T.BG,
+            fg_color=T.BG2, hover_color=T.BG, text_color=T.GOLD,
             font=T.FONT_SMALL,
             command=lambda: UpdateChecker.open_download_page(info.release_url),
         ).pack(side="left", padx=4)
@@ -218,6 +228,85 @@ class UpdateBanner(ctk.CTkFrame):
             text_color=T.TEXT_DIM, font=T.FONT_H3,
             command=self.destroy,
         ).pack(side="left")
+
+    def _start_download(self, asset) -> None:
+        """Open a progress dialog and download the asset in a background thread."""
+        dlg = _DownloadDialog(self.winfo_toplevel(), asset)
+        dlg.grab_set()
+
+
+class _DownloadDialog(ctk.CTkToplevel):
+    """Modal progress window for downloading a release asset."""
+
+    def __init__(self, parent, asset, **kw):
+        super().__init__(parent, **kw)
+        self._asset  = asset
+        self._done   = False
+
+        self.title("Downloading update…")
+        self.geometry("420x160")
+        self.resizable(False, False)
+        self.configure(fg_color=T.BG)
+
+        ctk.CTkLabel(self, text=f"Downloading  {asset.name}",
+                     font=T.FONT_BODY, text_color=T.TEXT).pack(pady=(18, 6))
+
+        self._bar = ctk.CTkProgressBar(self, width=360)
+        self._bar.set(0)
+        self._bar.pack(pady=4)
+
+        self._lbl = ctk.CTkLabel(self, text="Starting…",
+                                  font=T.FONT_SMALL, text_color=T.TEXT_DIM)
+        self._lbl.pack(pady=4)
+
+        self._cancel_btn = ctk.CTkButton(
+            self, text="Cancel", height=30, width=100,
+            fg_color=T.BG3, hover_color=T.BG2, font=T.FONT_SMALL,
+            command=self.destroy,
+        )
+        self._cancel_btn.pack(pady=8)
+
+        import threading
+        threading.Thread(target=self._download, daemon=True).start()
+
+    def _download(self) -> None:
+        from pathlib import Path
+        import tempfile
+
+        dest_dir = Path(tempfile.gettempdir())
+
+        def _progress(done: int, total: int) -> None:
+            if not self.winfo_exists():
+                return
+            frac = done / total if total else 0
+            mb_done  = done  / 1_048_576
+            mb_total = total / 1_048_576
+            self.after(0, lambda: self._bar.set(frac))
+            self.after(0, lambda: self._lbl.configure(
+                text=f"{mb_done:.1f} MB / {mb_total:.1f} MB"
+            ))
+
+        try:
+            path = UpdateChecker.download_asset(self._asset, dest_dir, _progress)
+        except Exception as exc:
+            if self.winfo_exists():
+                self.after(0, lambda: self._lbl.configure(
+                    text=f"⚠ Download failed: {exc}", text_color=T.RED
+                ))
+            return
+
+        if not self.winfo_exists():
+            return
+
+        def _done():
+            self._bar.set(1)
+            self._lbl.configure(text=f"✅  Saved to {path.parent}", text_color=T.GREEN)
+            self._cancel_btn.configure(
+                text="Open folder",
+                fg_color=T.ACCENT, hover_color=T.ACCENT2,
+                command=lambda: UpdateChecker.open_downloaded_file(path),
+            )
+        self.after(0, _done)
 
 
 # ═══════════════════════════════════════════════════════════════════
