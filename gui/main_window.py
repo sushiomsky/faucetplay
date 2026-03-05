@@ -660,6 +660,13 @@ class MainWindow(ctk.CTk):
         if self._bot and self._bot.running:
             self._stop_bot()
 
+    def _switch_to_tab(self, name: str):
+        """Switch to the named tab (used for screenshot automation)."""
+        try:
+            self._tabs.set(name)
+        except Exception:
+            pass
+
     # ── Auto-update ────────────────────────────────────────────────
 
     def _check_updates(self):

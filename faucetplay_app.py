@@ -24,6 +24,8 @@ def main():
                         help="Start GUI minimized (for system auto-start)")
     parser.add_argument("--version",   action="store_true",
                         help="Print version and exit")
+    parser.add_argument("--screenshot-tab", metavar="TAB",
+                        help="Auto-switch to TAB after startup (for screenshots)")
     args = parser.parse_args()
 
     if args.version:
@@ -37,14 +39,18 @@ def main():
     if args.no_gui:
         _run_headless(cfg)
     else:
-        _run_gui(cfg, minimized=args.minimized)
+        _run_gui(cfg, minimized=args.minimized,
+                 screenshot_tab=args.screenshot_tab)
 
 
-def _run_gui(cfg, minimized: bool = False):
+def _run_gui(cfg, minimized: bool = False, screenshot_tab: str = None):
     from gui.main_window import MainWindow
     app = MainWindow(config=cfg)
     if minimized:
         app.iconify()
+    if screenshot_tab:
+        app._switch_to_tab(screenshot_tab)
+        app.update()
     app.mainloop()
 
 

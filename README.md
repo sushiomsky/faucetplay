@@ -2,20 +2,101 @@
 
 # 🎰 FaucetPlay
 
-### Farm DuckDice faucets on autopilot — beautiful GUI, smart automation, zero babysitting
+### Farm DuckDice faucets 24/7 on complete autopilot
 
 [![Release](https://img.shields.io/github/v/release/sushiomsky/faucetplay?color=e94560&label=latest)](https://github.com/sushiomsky/faucetplay/releases/latest)
 [![Build](https://img.shields.io/github/actions/workflow/status/sushiomsky/faucetplay/release.yml?label=build)](https://github.com/sushiomsky/faucetplay/actions)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey)](#-install)
-[![Python](https://img.shields.io/badge/python-3.11%2B-blue)](#-run-from-source)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-**Stop leaving faucet money on the table.**  
-FaucetPlay claims your DuckDice faucets, plays the required Tic-Tac-Toe games automatically, bets toward your target with your chosen strategy, cashes out, and repeats — while you do literally anything else.
+**Set it and forget it.** Download, configure once, and let FaucetPlay run 24/7 farming your DuckDice faucets automatically — claiming, playing games, betting, cashing out, and repeating without any babysitting.
 
-[📥 Download](#-install) · [🚀 Quick Start](#-quick-start) · [⚙️ Settings](#%EF%B8%8F-settings-reference) · [🗺️ Roadmap](#%EF%B8%8F-planned-features--roadmap) · [❓ FAQ](#-faq) · [📋 Changelog](#-changelog)
+[📥 Download](#-install) · [🚀 Get Started](#-quick-start) · [❓ FAQ](#-faq) · [📋 What's New](#-changelog)
 
 </div>
+
+---
+
+## 🖼️ Dashboard
+
+![Dashboard](assets/screenshots/dashboard.png)
+
+The main dashboard shows your current balance, faucet earnings, target progress, and a live log of what's happening. Just start the bot and watch it work.
+
+---
+
+## ✨ What It Does
+
+### ⏰ Claim on Schedule
+Set up to 3 claim times per day (e.g., 09:00, 12:00, 18:00). FaucetPlay claims automatically and adds random jitter to avoid patterns.
+
+### 🎮 Auto-plays Tic-Tac-Toe
+Low PAW levels require games before claiming. FaucetPlay plays them all automatically in a headless browser — you never see it, but it just works.
+
+### 🎯 Smart Betting
+Choose your strategy:
+- **All-In** — one big swing for the target
+- **Martingale** — double after each loss
+- **Reverse Martingale** — ride the hot streaks
+- **D'Alembert** — steady increase/decrease
+- **Fibonacci** — classic sequence
+- **Fixed %** — steady x% of balance each round
+- **Custom Lua** — write your own strategy
+
+### 💰 Auto-Cashout
+Once your faucet balance hits your target, FaucetPlay automatically cashes out to your main wallet. Then it starts farming again.
+
+### 🌙 24/7 Unattended
+Run it headless (no GUI) on a server or always-on PC. The bot handles everything.
+
+### 💬 Auto-Chat
+Keep your account active by posting randomized messages to chat at configurable intervals. Great for staying engaged without babysitting the game.
+
+---
+
+## 🖼️ Settings & Configuration
+
+![Settings](assets/screenshots/settings.png)
+
+Simple, intuitive settings panel. Enter your API key and session cookie once, choose your betting strategy, set claim times, and you're done.
+
+---
+
+## 🖼️ Auto-Chat Manager
+
+![Auto-Chat](assets/screenshots/autochat.png)
+
+Add or remove chat messages, control send intervals, set rest periods (e.g., no chat between 10 PM and 8 AM), and enable dry-run mode to test without posting live.
+
+---
+
+## 📥 Install
+
+### Option A — Download & Run (Windows, macOS, or Linux)
+
+Go to [**Releases**](https://github.com/sushiomsky/faucetplay/releases/latest) and download the version for your OS:
+
+- **Windows 10/11** → `FaucetPlay-Windows.zip`  
+- **macOS Intel** (2015–2020) → `FaucetPlay-macOS-Intel.dmg`  
+- **macOS Apple Silicon** (M1/M2/M3/M4) → `FaucetPlay-macOS-AppleSilicon.dmg`  
+- **Linux x64** → `FaucetPlay-Linux.tar.gz`
+
+Extract and run. No Python, no installation needed.
+
+> **Not sure which Mac you have?**  
+> Apple menu → About This Mac. Intel chip = Intel DMG. M1/M2/M3/M4 = Apple Silicon DMG.
+
+### Option B — Run from Source
+
+If you're a developer or prefer the latest dev build:
+
+```bash
+git clone https://github.com/sushiomsky/faucetplay.git
+cd faucetplay
+pip install -r requirements.txt
+playwright install chromium
+python faucetplay_app.py
+```
 
 ---
 
@@ -24,180 +105,197 @@ FaucetPlay claims your DuckDice faucets, plays the required Tic-Tac-Toe games au
 ### 🤖 Faucet Automation
 | Feature | Details |
 |---|---|
-| 🎯 **PAW-aware faucet claiming** | Detects your account's PAW level (0–5) and follows the correct claim flow automatically |
-| 🎮 **Tic-Tac-Toe engine** | Headless Playwright browser plays all required TTT games using minimax — never loses, completes in minimum moves |
-| 🔁 **Continuous farming loop** | Claim → bet → cashout → repeat, fully unattended |
-| ⏳ **Cooldown awareness** | Detects cashout cooldowns and pauses betting until the window opens — never wastes a bet |
+| 🎯 **PAW-aware claiming** | Detects your account level (0–5) and handles the correct claim flow automatically |
+| 🎮 **Tic-Tac-Toe engine** | Plays all required games using minimax — never loses, completes instantly |
+| 🔁 **Continuous loop** | Claim → bet → cashout → repeat, fully unattended |
+| ⏳ **Cooldown aware** | Pauses during cashout cooldowns; never wastes bets |
 
 ### 🎲 Betting Strategies
-| Strategy | Description |
+| Strategy | What It Does |
 |---|---|
-| **All-In** | Bet entire balance — reach target in one lucky roll |
-| **Martingale** | Double bet after each loss; reset to base on any win |
-| **Reverse Martingale** | Double on win, reset on loss — ride hot streaks |
-| **D'Alembert** | +1 unit on loss, −1 on win — gentle progressive system |
-| **Fibonacci** | Follow the Fibonacci sequence on consecutive losses |
-| **Fixed Percentage** | Always wager X% of balance at a fixed win-chance |
-| **Custom Lua Script** | Load your own `faucet_adaptive_strategy.lua` for full control |
+| **All-In** | One big bet to reach target |
+| **Martingale** | Double after losing, reset on win |
+| **Reverse Martingale** | Double on win, reset on loss |
+| **D'Alembert** | Gradual +1/−1 system |
+| **Fibonacci** | Follow the sequence |
+| **Fixed %** | Always bet x% of balance |
+| **Custom Lua** | Full control with your own script |
 
-All strategies respect per-round stop-loss and reset cleanly after each cashout.
-
-### 🌐 Browser Session & Cookie Handling
+### 🌐 Browser & Session  
 | Feature | Details |
 |---|---|
-| 🔍 **Auto-extract from browser** | Reads your DuckDice cookies directly from Chrome or Firefox — no DevTools needed |
-| 💾 **Persistent session** | Playwright `browser_state.json` saved after first login — no re-authentication on restarts |
-| 🌐 **Browser Session mode** | Routes all API calls through Playwright's `APIRequestContext` for an identical TLS fingerprint to a real browser |
-| 🔓 **OS keychain support** | Optional `browser-cookie3` handles macOS Keychain & Windows DPAPI decryption |
+| 🔍 **Auto-extract cookies** | Reads directly from Chrome/Firefox — no copy-paste needed |
+| 💾 **Persistent session** | Log in once, auto-login every time after |
+| 🌐 **Browser mode** | Routes requests through a real browser for best compatibility |
 
-### 🔒 Security & Storage
+### 🔒 Security
 | Feature | Details |
 |---|---|
-| **Fernet AES encryption** | API key and session cookie stored encrypted at `~/.faucetplay_bot/config.json` |
-| **Key isolation** | Encryption key lives at `~/.faucetplay_bot/.key` (mode 0o600) — never bundled in the app |
-| **No secrets in logs** | All log output is scrubbed of credential values |
+| 🔐 **Encrypted storage** | API key and cookie encrypted locally — never sent anywhere |
+| 🗝️ **Key isolation** | Encryption key stored with mode 0o600 |
+| 🚫 **No log leaks** | Credentials never appear in logs |
 
-### ⏰ Scheduler & Automation
+### ⏰ Scheduler
 | Feature | Details |
 |---|---|
-| **Daily claim scheduler** | Set up to 3 HH:MM claim times per day |
-| **Jitter** | Random ±N minute offset per claim time to avoid fingerprinting patterns |
-| **System auto-start** | Register FaucetPlay to launch minimized at login (Windows, macOS, Linux) |
-| **Headless / server mode** | `--no-gui` flag runs the bot with saved config, no display required |
+| **Daily claim times** | Up to 3 times per day (e.g. 09:00, 12:00, 18:00) |
+| **Jitter** | Random ±N minutes added to avoid patterns |
+| **System auto-start** | Register to launch minimized at login |
+| **Headless mode** | Run with `--no-gui` on servers with no display |
 
-### 🖥️ GUI & UX
+### 🖥️ GUI
 | Feature | Details |
 |---|---|
-| **Setup wizard** | First-run onboarding — API key → cookie → currency → target in under 2 minutes |
-| **Live dashboard** | Faucet & main balance cards, target progress bar, win/loss counters, session timer |
-| **Real-time log** | Color-coded scrolling log with text filter and one-click copy |
-| **Strategy selector** | Choose or switch betting mode from the Settings panel |
-| **Toast notifications** | Non-intrusive win, target, and error toasts |
-| **In-app feedback** | Report bugs or request features directly to GitHub Issues — no account needed |
-| **Auto-update banner** | Checks GitHub releases on startup; shows a download link when a newer version exists |
-| **Unsaved-changes indicator** | Save buttons show `●` whenever there are pending unsaved changes |
-| **Dark UI** | Polished CustomTkinter interface — dark mode only, as it should be |
+| **Setup wizard** | First-run onboarding in under 2 minutes |
+| **Live dashboard** | Real-time balance, progress, win/loss counts |
+| **Toast alerts** | Quick notifications for wins and errors |
+| **In-app feedback** | Report bugs directly to GitHub |
+| **Auto-update** | Checks for new versions on startup |
+| **Dark mode** | Easy on the eyes 24/7 |
 
 ### 💬 Auto-Chat
 | Feature | Details |
 |---|---|
-| **Randomised chat messages** | Picks from a local SQLite message database and posts at a configurable random interval |
-| **100 default messages** | Seeded on first run — ready to use out of the box |
-| **Dry-run mode (default ON)** | Messages are only logged locally until you explicitly enable Live mode |
-| **Rest periods** | Silence chat during overnight windows or any HH:MM range (supports overnight wrap-around) |
-| **Message manager** | Add/remove messages, per-message enable toggle, live search, bulk Enable/Disable All |
-| **Activity mini-log** | Last 30 sent/dry-run entries shown live with timestamps in the Auto-Chat tab |
-| **⚡ Send Now** | Force an immediate message without waiting for the next interval |
-
----
-
-## 📥 Install
-
-### Option A — Pre-built binary (recommended, no Python needed)
-
-Go to [**Releases**](https://github.com/sushiomsky/faucetplay/releases/latest) and download for your OS:
-
-| Platform | File | Notes |
-|---|---|---|
-| 🪟 Windows 10/11 | `FaucetPlay-Windows.zip` | Extract and run `FaucetPlay.exe` |
-| 🍎 macOS Intel | `FaucetPlay-macOS-Intel.dmg` | 2015–2020 Macs with Core i5/i7/i9 — requires macOS 10.15+ |
-| 🍎 macOS Apple Silicon | `FaucetPlay-macOS-AppleSilicon.dmg` | M1 / M2 / M3 / M4 Macs |
-| 🐧 Linux x64 | `FaucetPlay-Linux.tar.gz` | Extract and run `./faucetplay.sh` |
-
-> **Not sure which Mac you have?** Apple menu → About This Mac. Intel chip = Intel DMG. M1/M2/M3/M4 = Apple Silicon DMG.
-
-### Option B — Run from source
-
-```bash
-# Requires Python 3.11+
-git clone https://github.com/sushiomsky/faucetplay.git
-cd faucetplay
-pip install -r requirements.txt
-playwright install chromium
-python faucetplay_app.py
-```
-
-Optional — enable OS-level cookie auto-extraction:
-
-```bash
-pip install browser-cookie3
-```
+| **Randomized posts** | Pick from your message database at intervals |
+| **100 default messages** | Pre-loaded, ready to use |
+| **Dry-run mode** | Test messages before posting live |
+| **Rest periods** | Silence chat overnight or during specific hours |
+| **Message manager** | Add/remove messages, toggle per-message |
+| **Activity log** | See last 30 sent/dry-run entries |
 
 ---
 
 ## 🚀 Quick Start
 
-1. **Launch** FaucetPlay — the setup wizard opens automatically on first run.
-2. **Enter your DuckDice API key** — found at DuckDice → Settings → API.
-3. **Add your session cookie** — two options:
-   - Click **🔍 Detect from Chrome/Firefox** to auto-extract (recommended).
-   - Or paste manually: Chrome DevTools (F12) → Application → Cookies → copy `_session`.
-4. **Set your currency** (e.g. `USDC`) and **target amount** (e.g. `20.0`).
-5. **Choose a betting strategy** in the Settings panel (default: All-In).
-6. Click **▶ Start Farming** and watch the balance grow.
+1. **Download** and launch FaucetPlay
+2. **Setup wizard** — enter your DuckDice API key (found in Settings → API)
+3. **Add session cookie** — click the auto-detect button to read from Chrome/Firefox, or paste manually
+4. **Set target amount** — e.g., 20.0 USDC
+5. **Choose strategy** — default is All-In (go big or go home)
+6. **Click Start Farming**
 
-> **PAW levels 0–3** require Tic-Tac-Toe games before each faucet claim. FaucetPlay plays them all automatically in a headless browser — no action required from you.
+That's it. The bot runs in the background and:
+- ✅ Claims your faucet on schedule
+- ✅ Plays Tic-Tac-Toe automatically
+- ✅ Bets toward your target
+- ✅ Cashes out when done
+- ✅ Repeats 24/7
 
----
-
-## ⚙️ Settings Reference
-
-### Credentials
-| Setting | Description |
-|---|---|
-| **API Key** | Your DuckDice API key |
-| **Session Cookie** | Raw `_session` cookie value — use the auto-detect button or paste manually |
-| **Browser Session** | Toggle to route all requests through Playwright (recommended for stability) |
-
-### Farming
-| Setting | Description |
-|---|---|
-| **Currency** | Which coin to farm — USDC, BTC, ETH, LTC, DOGE, and more |
-| **Target Amount** | Faucet balance that triggers an auto-cashout |
-| **House Edge** | Dice roll edge percentage (default 3%; lower = smaller multiplier) |
-| **Betting Mode** | All-In / Martingale / Reverse Martingale / D'Alembert / Fibonacci / Fixed % |
-| **Auto Cashout** | Automatically transfer to main balance when target is reached |
-| **Continue After Cashout** | Keep farming the same target after every cashout |
-
-### Scheduler
-| Setting | Description |
-|---|---|
-| **Claim Times** | Up to 3 HH:MM daily claim times (24-hour format) |
-| **Jitter** | Random ±N minute offset per claim to avoid behavioral patterns |
-| **System Auto-Start** | Register FaucetPlay to launch minimized at system login |
+> **First run tip:** PAW levels 0–3 require games. FaucetPlay plays them in a hidden browser — takes a few seconds, then moves on. No babysitting needed.
 
 ---
 
-## 🛠️ Building from Source
+## ❓ FAQ
+
+**Q: Is it safe? Can my credentials leak?**  
+A: Your API key and session cookie are encrypted with AES and stored only locally on your machine. Never sent anywhere. Encryption key is protected (mode 0o600) and never bundled in the app.
+
+**Q: Do I need Python installed?**  
+A: No, not if you download the pre-built binary. It's standalone.
+
+**Q: Can I run it on a server with no display?**  
+A: Yes. Use `--no-gui` flag and the bot runs headless with your saved config.
+
+**Q: Can I customize the betting strategy?**  
+A: Yes. The default strategies cover most use cases. For advanced users, you can provide a custom Lua script for full control.
+
+**Q: Will the bot play Tic-Tac-Toe for me?**  
+A: Yes, automatically. You never see it — it happens in a headless browser in seconds.
+
+**Q: Can I set multiple claim times?**  
+A: Yes, up to 3 times per day. Each gets a random jitter offset.
+
+**Q: Does it auto-update?**  
+A: Yes. On startup, it checks GitHub for new releases and shows a download link if an update is available.
+
+---
+
+## 🗺️ Roadmap (Planned Features)
+
+- [ ] Web UI alternative to desktop GUI
+- [ ] Cloud session backup (encrypted)
+- [ ] Multi-account farming
+- [ ] Advanced analytics & performance charts
+- [ ] Mobile app for monitoring
+
+---
+
+## 📋 Changelog
+
+### v1.5.0 — Auto-Chat & UX Polish
+- ✨ **Auto-Chat feature** — randomized message posting with message database, intervals, rest periods, and dry-run mode
+- 🎨 **Chat panel redesign** — two-pane layout with message manager, activity log, and Send Now button
+- 🔄 **Auto-update improved** — real Download button in banner with progress bar
+- 🔐 **Security hardening** — no credentials in release bundles, Playwright session secure
+- ✅ **CI/CD verification** — automated checks to ensure builds are credential-free
+- 🚀 **Download dialog** — progress bar, file count, and Open Folder button
+
+### v1.4.0 — Tic-Tac-Toe & Strategies
+- ✨ **TTT auto-play** — minimax solver for all required games
+- ✨ **Custom Lua scripts** — write your own betting logic  
+- 🎨 **Dashboard redesign** — live balance, progress bar, win/loss counters
+- 💬 **In-app feedback** — report bugs directly to GitHub Issues
+- 🔍 **Cookie auto-detect** — read from Chrome/Firefox automatically
+
+### v1.3.0 — Core Automation
+- ✨ **Faucet farming loop** — claim, bet, cashout, repeat
+- 📅 **Scheduler** — daily claim times with jitter and auto-start
+- 🎲 **Betting strategies** — All-In, Martingale, Reverse Martingale, D'Alembert, Fibonacci, Fixed %
+- 🔐 **Encrypted config** — API key and cookie stored securely locally
+- 🌐 **Browser session mode** — use real browser context for best compatibility
+
+---
+
+## 🛠️ For Developers
+
+### Building from Source
 
 ```bash
 pip install pyinstaller
 pyinstaller faucetplay.spec
-# Output binary: dist/FaucetPlay/
-# Required separately: playwright install chromium
+# Output: dist/FaucetPlay/
 ```
 
-The spec file (`faucetplay.spec`) bundles `customtkinter`, `playwright`, `cryptography`, `schedule`, and all assets into a single-folder `onedir` package for fast startup.
-
-### CI/CD — GitHub Actions Release Workflow
-
-Triggered by pushing any `v*` tag. Runs 4 jobs in parallel after integration tests pass:
-
-| Job | Runner | Output |
-|---|---|---|
-| `build-windows` | `windows-latest` | `FaucetPlay-Windows.zip` |
-| `build-macos-intel` | `macos-14` + Rosetta 2 | `FaucetPlay-macOS-Intel.dmg` |
-| `build-macos-arm` | `macos-14` (native) | `FaucetPlay-macOS-AppleSilicon.dmg` |
-| `build-linux` | `ubuntu-22.04` | `FaucetPlay-Linux.tar.gz` |
-
-The `release` job then creates a GitHub Release and attaches all four artifacts automatically.
-
-To trigger a release:
+### Lint & Tests
 
 ```bash
-git tag v1.5.0
-git push origin v1.5.0
+flake8 . --select=E9,F63,F7,F82  # Fatal errors only
+python -c "from core import DuckDiceAPI, BotConfig, FaucetBot; print('OK')"
 ```
+
+### Architecture
+
+```
+faucetplay_app.py       Entry point
+core/
+  bot.py                State machine (FARMING → CASHOUT → POST_CASHOUT → STOPPED)
+  api.py                DuckDice REST API wrapper
+  chat_bot.py           Auto-Chat scheduling and message posting
+  config.py             Settings storage (encrypted)
+  scheduler.py          Daily claim times with jitter
+  version.py            Version & changelog
+gui/
+  main_window.py        Main window & dashboard
+  chat_panel.py         Auto-Chat manager
+  settings_panel.py     Settings UI
+  theme.py              Colors & fonts
+```
+
+---
+
+## 📄 License
+
+MIT — See [LICENSE](LICENSE)
+
+---
+
+## 🤝 Contributing
+
+Found a bug? Have a feature idea? [Open an issue](https://github.com/sushiomsky/faucetplay/issues) or use the in-app feedback button (no account needed).
+
+---
+
+**Made with ❤️ for DuckDice farmers everywhere.**
 
 > The `FEEDBACK_TOKEN` placeholder in `core/version.py` is substituted with the `FEEDBACK_TOKEN` repository secret at build time to enable in-app GitHub Issue submission.
 
