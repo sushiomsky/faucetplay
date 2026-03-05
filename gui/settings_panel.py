@@ -398,17 +398,20 @@ class SettingsPanel(ctk.CTkScrollableFrame):
                 self.after(0, lambda: self._cookie_var.set(cookie))
                 label = source.replace("_", " ").title()
                 self.after(0, lambda: self._cookie_status_lbl.configure(
-                    text=f"✅  Found in {label}", text_color=T.GREEN))
+                    text=f"✅ Found in {label}", text_color=T.GREEN))
                 self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
             else:
+                # Auto-detect failed — offer options
                 self.after(0, lambda: self._cookie_status_lbl.configure(
-                    text="No DuckDice session found in Chrome/Firefox.",
+                    text="⚠️  Not found. Close Chrome/Firefox and try again, or use browser capture.",
                     text_color=T.YELLOW))
-                self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
+                self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
         except Exception as e:
             err = str(e)
             self.after(0, lambda: self._cookie_status_lbl.configure(
-                text=f"Detection error: {err}", text_color=T.RED))
+                text=f"❌ Detection error: {err[:60]}. Use browser capture instead.",
+                text_color=T.RED))
+            self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
         finally:
             self.after(0, lambda: self._detect_btn.configure(
                 state="normal", text="🔍 Detect from Chrome/Firefox"))
@@ -424,43 +427,59 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         import time as _time
         try:
             from playwright.sync_api import sync_playwright
-            with sync_playwright() as pw:
-                browser = pw.chromium.launch(headless=False)
-                context = browser.new_context()
-                page    = context.new_page()
-                page.goto("https://duckdice.io", wait_until="domcontentloaded",
-                          timeout=15_000)
-                cookie_str = None
-                for _ in range(120):
-                    cookies = context.cookies()
-                    if any(c["name"] == "_session" for c in cookies):
-                        cookie_str = "; ".join(
-                            f"{c['name']}={c['value']}"
-                            for c in cookies
-                            if "duckdice" in c.get("domain", "")
-                        )
-                        # Persist browser state
-                        try:
-                            from core.browser_session import _DEFAULT_STATE
-                            _DEFAULT_STATE.parent.mkdir(parents=True, exist_ok=True)
-                            context.storage_state(path=str(_DEFAULT_STATE))
-                        except Exception:
-                            pass
-                        break
-                    _time.sleep(1)
-                browser.close()
-            if cookie_str:
-                self.after(0, lambda: self._cookie_var.set(cookie_str))
-                self.after(0, lambda: self._cookie_status_lbl.configure(
-                    text="✅  Cookie captured & session saved!", text_color=T.GREEN))
-                self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
-            else:
-                self.after(0, lambda: self._cookie_status_lbl.configure(
-                    text="Timed out — log in within 2 minutes.", text_color=T.YELLOW))
+            try:
+                with sync_playwright() as pw:
+                    browser = pw.chromium.launch(headless=False)
+                    context = browser.new_context()
+                    page    = context.new_page()
+                    page.goto("https://duckdice.io", wait_until="domcontentloaded",
+                              timeout=15_000)
+                    cookie_str = None
+                    for _ in range(120):
+                        cookies = context.cookies()
+                        if any(c["name"] == "_session" for c in cookies):
+                            cookie_str = "; ".join(
+                                f"{c['name']}={c['value']}"
+                                for c in cookies
+                                if "duckdice" in c.get("domain", "")
+                            )
+                            # Persist browser state
+                            try:
+                                from core.browser_session import _DEFAULT_STATE
+                                _DEFAULT_STATE.parent.mkdir(parents=True, exist_ok=True)
+                                context.storage_state(path=str(_DEFAULT_STATE))
+                            except Exception:
+                                pass
+                            break
+                        _time.sleep(1)
+                    browser.close()
+                if cookie_str:
+                    self.after(0, lambda: self._cookie_var.set(cookie_str))
+                    self.after(0, lambda: self._cookie_status_lbl.configure(
+                        text="✅ Cookie captured & session saved!", text_color=T.GREEN))
+                    self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
+                else:
+                    self.after(0, lambda: self._cookie_status_lbl.configure(
+                        text="⏱️  Timed out — log in within 2 minutes.",
+                        text_color=T.YELLOW))
+                    self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
+            except Exception as e:
+                err = str(e)
+                # Provide helpful error messages
+                if "browser.launch" in err or "chromium" in err.lower():
+                    msg = "❌ Playwright error. Try: `playwright install chromium`"
+                elif "timeout" in err.lower():
+                    msg = "❌ Browser timeout. Check internet connection."
+                else:
+                    msg = f"❌ {err[:50]}"
+                self.after(0, lambda msg=msg: self._cookie_status_lbl.configure(
+                    text=msg, text_color=T.RED))
+                self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
         except Exception as e:
             err = str(e)
             self.after(0, lambda: self._cookie_status_lbl.configure(
-                text=f"Browser error: {err}", text_color=T.RED))
+                text=f"❌ Unexpected error: {err[:50]}", text_color=T.RED))
+            self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
         finally:
             self.after(0, lambda: self._capture_btn.configure(
                 state="normal", text="🤖 Open Browser & Capture"))

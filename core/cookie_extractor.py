@@ -154,15 +154,30 @@ def _decrypt_chrome_linux(encrypted: bytes) -> str:
 
 
 def _via_chrome_sqlite(domain: str = DOMAIN) -> Tuple[str, str]:
-    for path in _chrome_cookie_paths():
+    paths = _chrome_cookie_paths()
+    if not paths:
+        logger.debug("No Chrome cookie paths found for this OS")
+        return "", ""
+    
+    for path in paths:
         try:
+            if not path.exists():
+                logger.debug("Chrome cookie path does not exist: %s", path)
+                continue
             cookies = _read_sqlite_cookies(path, domain)
             if cookies:
                 logger.info("cookie_extractor: got %d cookies from Chrome SQLite (%s)",
                             len(cookies), path)
                 return "; ".join(cookies), "chrome_sqlite"
+        except PermissionError as exc:
+            logger.debug("Chrome SQLite %s — permission denied (browser may be running): %s", path, exc)
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                logger.debug("Chrome SQLite %s — database locked (browser may be running)", path)
+            else:
+                logger.debug("Chrome SQLite %s — database error: %s", path, exc)
         except Exception as exc:
-            logger.debug("chrome SQLite %s failed: %s", path, exc)
+            logger.debug("Chrome SQLite %s — unexpected error: %s", path, exc)
     return "", ""
 
 
@@ -185,8 +200,16 @@ def _firefox_cookie_paths() -> List[Path]:
 
 
 def _via_firefox_sqlite(domain: str = DOMAIN) -> Tuple[str, str]:
-    for path in _firefox_cookie_paths():
+    paths = _firefox_cookie_paths()
+    if not paths:
+        logger.debug("No Firefox cookie paths found")
+        return "", ""
+    
+    for path in paths:
         try:
+            if not path.exists():
+                logger.debug("Firefox cookie path does not exist: %s", path)
+                continue
             cookies = []
             with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
                 tmp_path = Path(tmp.name)
@@ -204,8 +227,15 @@ def _via_firefox_sqlite(domain: str = DOMAIN) -> Tuple[str, str]:
                 logger.info("cookie_extractor: got %d cookies from Firefox (%s)",
                             len(cookies), path)
                 return "; ".join(cookies), "firefox_sqlite"
+        except PermissionError as exc:
+            logger.debug("Firefox SQLite %s — permission denied (browser may be running): %s", path, exc)
+        except sqlite3.OperationalError as exc:
+            if "locked" in str(exc).lower():
+                logger.debug("Firefox SQLite %s — database locked (browser may be running)", path)
+            else:
+                logger.debug("Firefox SQLite %s — database error: %s", path, exc)
         except Exception as exc:
-            logger.debug("firefox SQLite %s failed: %s", path, exc)
+            logger.debug("Firefox SQLite %s — unexpected error: %s", path, exc)
     return "", ""
 
 
@@ -228,10 +258,11 @@ def extract_best(domain: str = DOMAIN) -> Tuple[str, str]:
         try:
             cookie, source = fn(domain)
             if cookie:
+                logger.debug("extract_best: found cookie via %s", source)
                 return cookie, source
         except Exception as exc:
-            logger.debug("extract_best: strategy %s raised: %s", fn.__name__, exc)
-    logger.info("cookie_extractor: no cookies found in any installed browser")
+            logger.warning("extract_best: strategy %s raised: %s", fn.__name__, exc)
+    logger.warning("cookie_extractor: no cookies found in any installed browser; try closing Chrome/Firefox and trying again, or paste manually")
     return "", ""
 
 

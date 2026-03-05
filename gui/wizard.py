@@ -1,6 +1,7 @@
+# -*- coding: utf-8 -*-
 """
 FaucetPlay — First-Run Onboarding Wizard
-5 steps: API Key → Cookie → PAW Level → Currency → Target & Cashout
+Steps: Cookie → PAW Level → Currency → Target & Cashout
 """
 from __future__ import annotations
 
@@ -20,7 +21,6 @@ _DUCKDICE_PROFILE_URL = "https://duckdice.io/profile"
 
 
 STEPS = [
-    "API Key",
     "Session Cookie",
     "PAW Level",
     "Currency",
@@ -127,40 +127,8 @@ class OnboardingWizard(ctk.CTkToplevel):
                 dot.configure(text="●", text_color=T.ACCENT)
             else:
                 dot.configure(text="○", text_color=T.TEXT_DIM)
-        [self._step_apikey, self._step_cookie, self._step_paw,
+        [self._step_cookie, self._step_paw,
          self._step_currency, self._step_target][idx]()
-
-    # ── Steps ──────────────────────────────────────────────────────
-
-    def _step_apikey(self):
-        _heading(self._content, "API Key  (Optional)")
-
-        steps_frame = ctk.CTkFrame(self._content, fg_color=T.BG3, corner_radius=6)
-        steps_frame.pack(fill="x", pady=(0, 10))
-        for i, txt in enumerate([
-            "Click  Open API Settings  below",
-            "Navigate to  Settings → API  tab",
-            "Click  Generate Key  (or copy your existing key)",
-            "Paste it in the field below",
-        ], start=1):
-            row = ctk.CTkFrame(steps_frame, fg_color="transparent")
-            row.pack(fill="x", padx=10, pady=(4 if i == 1 else 1, 1 if i < 4 else 4))
-            ctk.CTkLabel(row, text=f"{i}.", width=22, font=T.FONT_BODY,
-                         text_color=T.ACCENT2, anchor="e").pack(side="left")
-            ctk.CTkLabel(row, text=txt, font=T.FONT_BODY,
-                         text_color=T.TEXT, anchor="w").pack(side="left", padx=(6, 0))
-        ctk.CTkButton(
-            steps_frame, text="🌐  Open API Settings", height=30,
-            fg_color=T.BG2, hover_color=T.BG, font=T.FONT_SMALL,
-            command=lambda: webbrowser.open(_DUCKDICE_PROFILE_URL),
-        ).pack(padx=10, pady=(2, 10), anchor="w")
-
-        _entry(self._content, "API Key", var=self._api_key_var, show="•")
-        _hint(self._content,
-              "💡 FaucetPlay bets using your session cookie — the same way the "
-              "DuckDice website does. The API key is only needed as a fallback "
-              "if cookie auth is rejected for betting or cashout. You can skip "
-              "this step and add it later in Settings if needed.")
 
     def _step_cookie(self):
         _heading(self._content, "Enter your Session Cookie")
@@ -449,15 +417,15 @@ class OnboardingWizard(ctk.CTkToplevel):
             self._show_step(self._step + 1)
 
     def _validate(self) -> bool:
-        if self._step == 1 and not self._cookie_var.get().strip():
+        if self._step == 0 and not self._cookie_var.get().strip():
             self._status("Cookie is required.", T.RED); return False
-        if self._step == 4:
+        if self._step == 3:  # Target & Cashout step
             try:
                 val = float(self._target_var.get())
-                if val <= 0:
-                    raise ValueError()
+                if val < 20:
+                    raise ValueError("minimum 20")
             except ValueError:
-                self._status("Enter a valid target amount (e.g. 20.0).", T.RED)
+                self._status("Enter a valid target amount (minimum 20.0).", T.RED)
                 return False
         return True
 
