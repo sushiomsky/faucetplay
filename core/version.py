@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.5.0"
+APP_VERSION = "1.5.3"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,11 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.5.3 — User-Friendly README & Screenshots
+  • 📖 Complete README redesign — beginner-first, less technical
+  • 📸 Inline screenshots of Dashboard, Settings, and Auto-Chat tabs
+  • ⚡ Auto tab-switch CLI arg for screenshot automation
+
 v1.5.0 — Auto-Chat & UX Overhaul
   • 💬 Auto-Chat engine — sends random messages to DuckDice chat on a schedule
   • 📦 100 default messages seeded in a local SQLite database (~/.faucetplay_bot/chat_messages.db)
