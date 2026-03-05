@@ -32,7 +32,7 @@ class BotConfig:
             "target_amount":            20.0,
             "house_edge":               0.03,
             "min_bet":                  0.001,
-            "auto_cashout":             False,
+            "auto_cashout":             True,
             "cashout_threshold":        0.0,
             "cashout_cooldown_seconds": 3600,
             "continue_after_cashout":   True,
