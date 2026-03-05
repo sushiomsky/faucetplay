@@ -512,10 +512,10 @@ class SettingsPanel(ctk.CTkScrollableFrame):
     def _save(self):
         try:
             target = float(self._target_var.get())
-            if target <= 0:
-                raise ValueError()
+            if target < 20:
+                raise ValueError("minimum 20")
         except ValueError:
-            self._status_lbl.configure(text="Invalid target amount.", text_color=T.RED)
+            self._status_lbl.configure(text="Invalid target amount (minimum 20.0).", text_color=T.RED)
             return
 
         try:

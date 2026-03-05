@@ -17,21 +17,21 @@ elif _sys == "Darwin":
 else:
     _MONO = "DejaVu Sans Mono"
 
-# Main palette
-BG        = "#1a1a2e"
-BG2       = "#16213e"
-BG3       = "#0f3460"
-BG_CARD   = "#1e2340"   # slightly lighter card background
-ACCENT    = "#e94560"
-ACCENT2   = "#f5a623"
-TEXT      = "#eaeaea"
-TEXT_DIM  = "#888888"
-GREEN     = "#27ae60"
-RED       = "#e74c3c"
-YELLOW    = "#f39c12"
-BLUE      = "#2980b9"
-TEAL      = "#1abc9c"
-GOLD      = "#f0c040"   # win / cashout highlight
+# Main palette — muted neutral dark theme
+BG        = "#1a1a1a"      # deep black
+BG2       = "#2a2a2a"      # dark grey
+BG3       = "#3a3a3a"      # medium grey
+BG_CARD   = "#242424"      # slightly lighter card background
+ACCENT    = "#6b8cae"      # muted blue-grey
+ACCENT2   = "#8a9aaa"      # lighter grey-blue
+TEXT      = "#e8e8e8"      # soft white
+TEXT_DIM  = "#777777"      # dim grey
+GREEN     = "#6fa676"      # muted green
+RED       = "#c97c7c"      # muted red
+YELLOW    = "#d9a85c"      # muted gold
+BLUE      = "#5a7a8a"      # muted blue
+TEAL      = "#5a8a8a"      # muted teal
+GOLD      = "#c9a65c"      # muted gold for highlights
 
 # Status colours
 STATUS_RUNNING   = GREEN
