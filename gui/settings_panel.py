@@ -25,11 +25,13 @@ class SettingsPanel(ctk.CTkScrollableFrame):
     def __init__(self, parent, config: BotConfig,
                  scheduler: BotScheduler,
                  on_save: Optional[Callable[[], None]] = None,
+                 on_wizard: Optional[Callable[[], None]] = None,
                  **kw):
         super().__init__(parent, fg_color=T.BG, **kw)
         self._cfg   = config
         self._sched = scheduler
         self._on_save = on_save
+        self._on_wizard = on_wizard
 
         # StringVars
         self._api_key_var    = tk.StringVar(value=config.get("api_key", ""))
@@ -157,7 +159,9 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         _section("🎲  Strategy")
         _row("Currency", lambda p: ctk.CTkOptionMenu(
             p, variable=self._currency_var, height=32,
-            values=["USDC", "BTC", "ETH", "LTC", "DOGE", "TRX", "SOL", "BNB", "XRP"],
+            values=["BTC", "ETH", "LTC", "DOGE", "BCH", "TRX", "USDT", "USDC",
+                    "SOL", "BNB", "XRP", "ADA", "MATIC", "AVAX", "DOT", "LINK",
+                    "UNI", "ATOM", "TON", "SHIB", "DAI", "APT", "ARB", "OP"],
             fg_color=T.BG3, button_color=T.BG3, button_hover_color=T.BG2,
         ))
 
@@ -305,10 +309,19 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._status_lbl = ctk.CTkLabel(self, text="", font=T.FONT_SMALL,
                                          text_color=T.TEXT_DIM)
         self._status_lbl.pack(pady=(0, 4))
-        self._save_btn = ctk.CTkButton(self, text="💾  Save Settings", height=38,
+        
+        btn_row = ctk.CTkFrame(self, fg_color="transparent")
+        btn_row.pack(fill="x", pady=4)
+        
+        self._save_btn = ctk.CTkButton(btn_row, text="💾  Save Settings", height=38,
                        fg_color=T.ACCENT, hover_color=T.ACCENT2,
                        font=T.FONT_BODY, command=self._save)
-        self._save_btn.pack(pady=4)
+        self._save_btn.pack(side="left", expand=True, fill="x", padx=(0, 4))
+        
+        ctk.CTkButton(btn_row, text="🎯 Rerun Wizard", height=38, width=140,
+                      fg_color=T.BG3, hover_color=T.BG2,
+                      font=T.FONT_BODY, command=self._rerun_wizard,
+                      ).pack(side="left")
 
         # ── About & Updates ───────────────────────────────────────
         _section("ℹ️  About & Updates")
@@ -658,3 +671,8 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         self._dirty = False
         if self._save_btn:
             self._save_btn.configure(text="💾  Save Settings")
+    
+    def _rerun_wizard(self) -> None:
+        """Open the wizard again for reconfiguration."""
+        if self._on_wizard:
+            self._on_wizard()

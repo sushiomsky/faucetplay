@@ -135,6 +135,9 @@ class FaucetBot:
         paw = self._api.get_paw_level(force=True)
         self._log(f"🐾 PAW Level {paw}  |  TTT required: {self._api.ttt_games_needed()}")
 
+        # Clear any leftover faucet balances in other currencies
+        self._clear_leftover_balances(currency)
+
         min_bet = self._api.get_min_bet(currency)
         self._log(f"💱 {currency}  |  min bet: {min_bet}  |  target: {self.target_amount}")
         auto_co = self._cfg.get("auto_cashout", False)
@@ -421,6 +424,85 @@ class FaucetBot:
             self._last_win = None
             self._log("❌ Bet failed.")
         time.sleep(2)
+
+    # ── Balance Management ─────────────────────────────────────────
+
+    def _clear_leftover_balances(self, target_currency: str) -> None:
+        """
+        Check all currencies for leftover faucet balances and bet them to 0.
+        DuckDice requires ALL faucet balances = 0 before claiming.
+        """
+        if not self._api:
+            return
+        
+        # All supported currencies
+        all_currencies = ['BTC', 'ETH', 'LTC', 'DOGE', 'BCH', 'TRX', 'USDT', 'USDC',
+                         'SOL', 'BNB', 'XRP', 'ADA', 'MATIC', 'AVAX', 'DOT', 'LINK',
+                         'UNI', 'ATOM', 'TON', 'SHIB', 'DAI', 'APT', 'ARB', 'OP']
+        
+        # Remove target currency from check (we'll use it for farming)
+        currencies_to_check = [c for c in all_currencies if c != target_currency]
+        
+        found_balances = []
+        for curr in currencies_to_check:
+            try:
+                bal = self._api.get_balance(curr)
+                faucet = bal.get('faucet', 0.0)
+                if faucet > 0:
+                    found_balances.append((curr, faucet))
+            except Exception:
+                # Currency might not be available, skip
+                continue
+        
+        if not found_balances:
+            self._log("✅ No leftover faucet balances found")
+            return
+        
+        self._log("=" * 60)
+        self._log("⚠️  Found leftover faucet balances in other currencies:")
+        for curr, amount in found_balances:
+            self._log(f"   {curr}: {amount:.8f}")
+        self._log("🧹 Clearing balances to enable faucet claiming...")
+        self._log("=" * 60)
+        
+        # Clear each balance by betting it away
+        for curr, amount in found_balances:
+            if not self.running:
+                return
+            
+            self._wait_if_paused()
+            
+            try:
+                min_bet = self._api.get_min_bet(curr)
+                self._log(f"🎲 Clearing {amount:.8f} {curr}...")
+                
+                # Simple all-in bet to clear the balance quickly
+                chance = 49.5
+                multiplier = 2.0
+                
+                result = self._api.play_dice(curr, amount, chance, multiplier, over=True)
+                
+                if result.get("success"):
+                    # Don't care if we win or lose, just need balance = 0
+                    new_bal = self._api.get_balance(curr).get('faucet', 0.0)
+                    if new_bal == 0:
+                        self._log(f"✅ {curr} faucet cleared!")
+                    else:
+                        # Won the bet, bet again
+                        self._log(f"   Won! Betting {new_bal:.8f} {curr} again...")
+                        self._api.play_dice(curr, new_bal, chance, multiplier, over=True)
+                        final_bal = self._api.get_balance(curr).get('faucet', 0.0)
+                        self._log(f"✅ {curr} faucet cleared to {final_bal:.8f}")
+                
+                time.sleep(1)  # Brief delay between bets
+                
+            except Exception as exc:
+                self._log(f"⚠️  Failed to clear {curr}: {exc}")
+                # Continue with other currencies
+        
+        self._log("=" * 60)
+        self._log("✅ Balance clearing complete. Starting main farming...")
+        self._log("=" * 60)
 
     # ── Helpers ────────────────────────────────────────────────────
 

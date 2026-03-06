@@ -612,6 +612,7 @@ class MainWindow(ctk.CTk):
         self._settings_panel = SettingsPanel(
             tab, self._cfg, self._sched,
             on_save=self._on_settings_saved,
+            on_wizard=self._open_wizard,
         )
         self._settings_panel.grid(row=0, column=0, sticky="nsew")
 
