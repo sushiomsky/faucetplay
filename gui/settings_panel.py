@@ -109,7 +109,7 @@ class SettingsPanel(ctk.CTkScrollableFrame):
 
         hint = ctk.CTkLabel(self, text=(
             "How to find your cookie: DuckDice.io → F12 → Application "
-            "→ Cookies → copy the full string."
+            "→ Cookies → copy the full string, or use auto-detect below."
         ), font=T.FONT_SMALL, text_color=T.TEXT_DIM, wraplength=480, justify="left")
         hint.pack(anchor="w", padx=4, pady=(0, 4))
 
@@ -391,6 +391,9 @@ class SettingsPanel(ctk.CTkScrollableFrame):
         threading.Thread(target=self._do_detect_cookie, daemon=True).start()
 
     def _do_detect_cookie(self):
+        import platform
+        system = platform.system()
+        
         try:
             from core.cookie_extractor import extract_best
             cookie, source = extract_best("duckdice.io")
@@ -401,16 +404,35 @@ class SettingsPanel(ctk.CTkScrollableFrame):
                     text=f"✅ Found in {label}", text_color=T.GREEN))
                 self.after(4000, lambda: self._cookie_status_lbl.configure(text=""))
             else:
-                # Auto-detect failed — offer options
+                # Auto-detect failed — provide platform-specific guidance
+                if system == "Darwin":
+                    msg = ("⚠️  Not found. On macOS: Grant Keychain access if prompted, "
+                           "close browser completely, or use 'Open Browser & Capture'.")
+                elif system == "Windows":
+                    msg = ("⚠️  Not found. On Windows: Close browser completely and try again, "
+                           "or use 'Open Browser & Capture'.")
+                else:
+                    msg = "⚠️  Not found. Close browser and try again, or use 'Open Browser & Capture'."
+                
                 self.after(0, lambda: self._cookie_status_lbl.configure(
-                    text="⚠️  Not found. Close Chrome/Firefox and try again, or use browser capture.",
-                    text_color=T.YELLOW))
-                self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
+                    text=msg, text_color=T.YELLOW))
+                self.after(8000, lambda: self._cookie_status_lbl.configure(text=""))
+        except PermissionError as e:
+            if system == "Darwin":
+                err_msg = "❌ Keychain access denied. Please grant access and try again."
+            else:
+                err_msg = f"❌ Permission denied: {str(e)[:50]}"
+            self.after(0, lambda: self._cookie_status_lbl.configure(
+                text=err_msg, text_color=T.RED))
+            self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
         except Exception as e:
             err = str(e)
+            if "keychain" in err.lower() or "password" in err.lower():
+                err_msg = "❌ Keychain error. Grant access when prompted, or use browser capture."
+            else:
+                err_msg = f"❌ Error: {err[:50]}. Use browser capture instead."
             self.after(0, lambda: self._cookie_status_lbl.configure(
-                text=f"❌ Detection error: {err[:60]}. Use browser capture instead.",
-                text_color=T.RED))
+                text=err_msg, text_color=T.RED))
             self.after(6000, lambda: self._cookie_status_lbl.configure(text=""))
         finally:
             self.after(0, lambda: self._detect_btn.configure(

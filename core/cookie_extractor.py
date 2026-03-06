@@ -43,19 +43,42 @@ def _via_browser_cookie3(domain: str = DOMAIN) -> Tuple[str, str]:
     try:
         import browser_cookie3  # type: ignore
     except ImportError:
+        logger.warning("browser_cookie3 not installed — cannot auto-extract cookies")
         return "", ""
 
     for name, fn in [("chrome", browser_cookie3.chrome),
                      ("firefox", browser_cookie3.firefox)]:
         try:
+            logger.debug("Attempting cookie extraction from %s...", name)
             jar = fn(domain_name=domain)
             cookies = [f"{c.name}={c.value}" for c in jar]
             if cookies:
                 logger.info("cookie_extractor: got %d cookies from %s via browser_cookie3",
                             len(cookies), name)
                 return "; ".join(cookies), name
+            else:
+                logger.debug("No cookies found in %s for domain %s", name, domain)
+        except PermissionError as exc:
+            # macOS Keychain access denied or Windows DPAPI issue
+            if platform.system() == "Darwin":
+                logger.warning(
+                    "browser_cookie3 %s — permission denied. "
+                    "On macOS, you may need to grant Keychain access. "
+                    "Try closing %s completely and running again, or grant access when prompted.",
+                    name, name.title()
+                )
+            else:
+                logger.warning("browser_cookie3 %s — permission denied: %s", name, exc)
         except Exception as exc:
-            logger.debug("browser_cookie3 %s failed: %s", name, exc)
+            exc_str = str(exc).lower()
+            if "keychain" in exc_str or "password" in exc_str:
+                logger.warning(
+                    "browser_cookie3 %s — macOS Keychain access issue. "
+                    "Please grant access when prompted, or close %s and try again.",
+                    name, name.title()
+                )
+            else:
+                logger.debug("browser_cookie3 %s failed: %s", name, exc)
 
     return "", ""
 
@@ -254,15 +277,41 @@ def extract_best(domain: str = DOMAIN) -> Tuple[str, str]:
         source        : "chrome" | "firefox" | "chrome_sqlite" |
                         "firefox_sqlite" | ""
     """
-    for fn in [_via_browser_cookie3, _via_chrome_sqlite, _via_firefox_sqlite]:
+    strategies = [
+        ("browser_cookie3", _via_browser_cookie3),
+        ("chrome_sqlite", _via_chrome_sqlite),
+        ("firefox_sqlite", _via_firefox_sqlite),
+    ]
+    
+    for strategy_name, fn in strategies:
         try:
             cookie, source = fn(domain)
             if cookie:
-                logger.debug("extract_best: found cookie via %s", source)
+                logger.info("extract_best: successfully extracted cookies via %s", strategy_name)
                 return cookie, source
         except Exception as exc:
-            logger.warning("extract_best: strategy %s raised: %s", fn.__name__, exc)
-    logger.warning("cookie_extractor: no cookies found in any installed browser; try closing Chrome/Firefox and trying again, or paste manually")
+            logger.warning("extract_best: strategy %s raised: %s", strategy_name, exc)
+    
+    # No cookies found — provide platform-specific guidance
+    system = platform.system()
+    if system == "Darwin":
+        logger.warning(
+            "cookie_extractor: no cookies found in any installed browser. "
+            "On macOS, try: (1) Grant Keychain access when prompted, "
+            "(2) Close Chrome/Firefox completely and try again, "
+            "(3) Use the 'Open Browser & Capture' button instead."
+        )
+    elif system == "Windows":
+        logger.warning(
+            "cookie_extractor: no cookies found in any installed browser. "
+            "On Windows, try: (1) Close Chrome/Firefox completely and try again, "
+            "(2) Use the 'Open Browser & Capture' button instead."
+        )
+    else:
+        logger.warning(
+            "cookie_extractor: no cookies found in any installed browser. "
+            "Try closing Chrome/Firefox and trying again, or paste cookie manually."
+        )
     return "", ""
 
 

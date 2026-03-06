@@ -34,6 +34,13 @@ a = Analysis(
         "tkinter",
         "tkinter.ttk",
         "_tkinter",
+        # Cookie extraction (browser_cookie3 and dependencies)
+        "browser_cookie3",
+        "lz4",
+        "lz4.frame",
+        "Cryptodome",
+        "Cryptodome.Cipher",
+        "Cryptodome.Protocol.KDF",
     ],
     hookspath=[],
     hooksconfig={},
