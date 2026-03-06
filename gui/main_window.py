@@ -700,6 +700,7 @@ class MainWindow(ctk.CTk):
     def _on_wizard_done(self):
         self._refresh_header()
         self._hero.refresh(self._cfg)
+        self._settings_panel.refresh_from_config()  # Reload settings UI with wizard values
         self.toasts.show("Setup complete! Press Start to begin farming 🎰", "success")
 
     def _on_settings_saved(self):

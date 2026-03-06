@@ -604,3 +604,57 @@ class SettingsPanel(ctk.CTkScrollableFrame):
             self._dirty = True
             if self._save_btn:
                 self._save_btn.configure(text="💾  Save Settings ●")
+
+    def refresh_from_config(self) -> None:
+        """
+        Reload all widget values from the config.
+        Called after wizard completion or external config changes.
+        """
+        # Temporarily remove trace callbacks to avoid marking as dirty
+        _watched = (
+            self._api_key_var, self._cookie_var, self._currency_var, self._target_var,
+            self._edge_var, self._base_bet_var, self._bet_percent_var,
+            self._strat_chance_var, self._jitter_var, self._strategy_var,
+            self._auto_co_var, self._continue_var, self._sched_on_var,
+            self._browser_session_var, *self._time_vars,
+        )
+        
+        # Clear existing traces
+        for var in _watched:
+            for trace_id in var.trace_info():
+                var.trace_remove(*trace_id)
+        
+        # Update all values from config
+        self._api_key_var.set(self._cfg.get("api_key", ""))
+        self._cookie_var.set(self._cfg.get("cookie", ""))
+        self._currency_var.set(self._cfg.get("currency", "USDC"))
+        self._target_var.set(str(self._cfg.get("target_amount", "20.0")))
+        self._edge_var.set(str(self._cfg.get("house_edge", "0.03")))
+        self._auto_co_var.set(bool(self._cfg.get("auto_cashout", True)))
+        self._continue_var.set(bool(self._cfg.get("continue_after_cashout", True)))
+        self._sched_on_var.set(bool(self._cfg.get("scheduler_enabled", False)))
+        self._browser_session_var.set(bool(self._cfg.get("use_browser_session", False)))
+        
+        # Strategy vars
+        saved_strategy = self._cfg.get("strategy", "all_in")
+        self._strategy_var.set(STRATEGY_LABELS.get(saved_strategy, "All-In"))
+        self._base_bet_var.set(str(self._cfg.get("strategy_base_bet", "0.001")))
+        self._bet_percent_var.set(str(self._cfg.get("strategy_bet_percent", "1.0")))
+        self._strat_chance_var.set(str(self._cfg.get("strategy_chance", "49.5")))
+        
+        # Schedule times
+        saved_times = self._cfg.get("schedules", []) or []
+        while len(saved_times) < 3:
+            saved_times.append("")
+        for i, time_str in enumerate(saved_times[:3]):
+            self._time_vars[i].set(time_str)
+        self._jitter_var.set(str(self._cfg.get("jitter_minutes", "5")))
+        
+        # Restore traces
+        for var in _watched:
+            var.trace_add("write", self._mark_dirty)
+        
+        # Clear dirty flag
+        self._dirty = False
+        if self._save_btn:
+            self._save_btn.configure(text="💾  Save Settings")
