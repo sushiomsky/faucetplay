@@ -488,10 +488,10 @@ class MainWindow(ctk.CTk):
         cards_frame = ctk.CTkFrame(tab, fg_color="transparent")
         cards_frame.grid(row=0, column=0, sticky="ew", pady=(4, 4))
 
-        self._card_faucet  = BalanceCard(cards_frame, "Faucet Balance", colour=T.TEAL)
-        self._card_main    = BalanceCard(cards_frame, "Main Balance",   colour=T.BLUE)
-        self._card_profit  = BalanceCard(cards_frame, "Session Profit", colour=T.GREEN)
-        self._card_cashout = BalanceCard(cards_frame, "Cashed Out 💰",  colour=T.GOLD)
+        self._card_faucet  = BalanceCard(cards_frame, "Faucet Balance", colour=T.TEAL, subtitle="")
+        self._card_main    = BalanceCard(cards_frame, "Main Balance",   colour=T.BLUE, subtitle="")
+        self._card_profit  = BalanceCard(cards_frame, "Session Profit", colour=T.GREEN, subtitle="")
+        self._card_cashout = BalanceCard(cards_frame, "Cashed Out 💰",  colour=T.GOLD, subtitle="")
         self._card_bets    = BalanceCard(cards_frame, "Bets  W / L",    colour=T.TEXT)
         for card in (self._card_faucet, self._card_main, self._card_profit,
                      self._card_cashout, self._card_bets):
@@ -898,6 +898,9 @@ class MainWindow(ctk.CTk):
         rounds  = int(stats.get("rounds_completed", 0))
         state   = self._bot.get_state()
         paused  = getattr(self._bot, "paused", False)
+        
+        # Get currency from config for display
+        currency = self._cfg.get("currency", "USDC")
 
         p_col = T.GREEN if profit >= 0 else T.RED
         wr    = f"{w/n*100:.0f}%" if n else "—%"
@@ -925,12 +928,13 @@ class MainWindow(ctk.CTk):
         pct = min(cur_b / threshold, 1.0) if threshold > 0 else 0.0
 
         def _upd():
-            self._card_faucet.set(f"{cur_b:.6f}", T.TEAL)
-            self._card_main.set(f"{main_b:.6f}" if main_b else "—", T.BLUE)
-            self._card_profit.set(f"{profit:+.6f}", p_col)
+            self._card_faucet.set(f"{cur_b:.6f}", T.TEAL, subtitle=currency)
+            self._card_main.set(f"{main_b:.6f}" if main_b else "—", T.BLUE, subtitle=currency)
+            self._card_profit.set(f"{profit:+.6f}", p_col, subtitle=currency)
             self._card_cashout.set(
                 f"{cashed:.6f}" + (f"  ×{cashct}" if cashct > 1 else ""),
                 T.GOLD if cashed > 0 else T.TEXT_DIM,
+                subtitle=currency,
             )
             self._card_bets.set(f"{w} / {l}", T.TEXT)
             self._stat_dur.configure(text=dur)
@@ -941,7 +945,7 @@ class MainWindow(ctk.CTk):
             self._progress.set(pct)
             if threshold > 0:
                 self._prog_lbl.configure(
-                    text=f"{cur_b:.4f} / {threshold:.4f}  ({pct*100:.0f}%)"
+                    text=f"{cur_b:.4f} / {threshold:.4f} {currency}  ({pct*100:.0f}%)"
                 )
             self._status(state_txt, state_col)
             if not (self._bot and self._bot.running and

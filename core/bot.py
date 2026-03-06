@@ -55,7 +55,7 @@ class FaucetBot:
         self._state  = BotState.STOPPED
 
         self._last_claim_time: float = 0.0
-        self.claim_cooldown: int = 60
+        self.claim_cooldown: int = 61  # 60s + 1s buffer to avoid timing issues
 
         # Derived from config (set at start())
         self.target_amount: float = 0.0
