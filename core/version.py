@@ -3,7 +3,7 @@ FaucetPlay — Version & Release Metadata
 """
 
 APP_NAME    = "FaucetPlay"
-APP_VERSION = "1.5.3"
+APP_VERSION = "1.6.0"
 TAGLINE     = "Farm DuckDice faucets on autopilot"
 
 # GitHub repository (owner/repo)
@@ -24,6 +24,16 @@ FEEDBACK_TOKEN = "@FEEDBACK_TOKEN@"
 
 # One-line changelog shown in the About panel
 CHANGELOG = """\
+v1.6.0 — Multi-Currency Support & UX Polish
+  • 💱 Multi-currency support — farm and cashout in any DuckDice-supported coin
+  • 🧹 Auto-clear balances after cashout for a clean session start
+  • 🧙 Re-run Wizard button in Settings — re-launch onboarding at any time
+  • 🔧 Fix: currency display, cooldown timing, and live GUI balance updates
+  • 🔧 Fix: wizard values now persist correctly in the Settings tab
+  • 🔧 Fix: auto-extract cookies from Chrome/Firefox on macOS
+  • 🎨 Muted colour theme, updated target minimum to 20, improved error messages
+  • ✅ Unit tests for config, bot, and chat_bot modules
+
 v1.5.3 — User-Friendly README & Screenshots
   • 📖 Complete README redesign — beginner-first, less technical
   • 📸 Inline screenshots of Dashboard, Settings, and Auto-Chat tabs
